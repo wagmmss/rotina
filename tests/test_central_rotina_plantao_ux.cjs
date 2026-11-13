@@ -6,7 +6,7 @@
  * 1. Central de Rotina & Lifestyle Adaptativo (`enviarRotinaBot`, `ux:hub:rotina`)
  * 2. Roteamento de callbacks `ux:rotina:*` com determinismo 0ms e edição in-place
  * 3. Consulta de Agenda Hoje e Amanhã (`consultarEventosAgenda`, `ux:rotina:agenda`, `/agenda`)
- * 4. Listagem de Tarefas do Notion (`listarTarefasHojeNotion`, `ux:rotina:tasks`, `/tasks`)
+ * 4. Listagem de Dúvidas MedQuest Locais (`listarDuvidasMedQuest`, `ux:rotina:duvidas_lista`, `/duvidas`)
  * 5. Briefing Matinal & Check-in Noturno (`enviarBriefingMatinal`, `enviarCheckinNoturno`)
  * 6. Fechamento e Passagem de Plantão (`gerarResumoFimPlantao`, `/plantao_fim`, `ux:rotina:plantao_fim`)
  * 7. Botão de 1 Toque para Copiar Resumo de Plantão para Prontuário (`ux:copiar:<uuid>`)
@@ -143,16 +143,16 @@ async function executarTestesCentralRotinaPlantaoUX() {
   assert.ok(cbsAgendaAmanha.includes('ux:hub:inicio'), 'Agenda amanhã deve ter [🏠 Início]');
   assert.ok(cbsAgendaAmanha.includes('ux:rotina:agenda'), 'Agenda amanhã deve alternar para agenda de hoje');
 
-  // 2.3 Tarefas Notion (tasks)
+  // 2.3 Banco Local de Dúvidas MedQuest (duvidas_lista)
   limparCaptura();
-  ctx.tratarCallbackUX({ id: 'cb3', data: 'ux:rotina:tasks', message: { chat: { id: chatId }, message_id: 103 } });
-  assert.ok(mensagensEnviadas.length > 0, 'ux:rotina:tasks deve responder');
+  ctx.tratarCallbackUX({ id: 'cb3', data: 'ux:rotina:duvidas_lista', message: { chat: { id: chatId }, message_id: 103 } });
+  assert.ok(mensagensEnviadas.length > 0, 'ux:rotina:duvidas_lista deve responder');
   assert.strictEqual(mensagensEnviadas[0].tipo, 'edit', 'Deve editar mensagem in-place');
-  assert.ok(mensagensEnviadas[0].texto.includes('Tarefas') || mensagensEnviadas[0].texto.includes('PENDÊNCIAS') || mensagensEnviadas[0].texto.includes('Notion Tasks'));
-  const cbsTasks = extrairCallbacks(mensagensEnviadas[0].kb);
-  assert.ok(cbsTasks.includes('ux:hub:rotina'), 'Tarefas deve ter [🔙 Central de Rotina]');
-  assert.ok(cbsTasks.includes('ux:hub:inicio'), 'Tarefas deve ter [🏠 Início]');
-  assert.ok(cbsTasks.includes('ux:rotina:tasks'), 'Tarefas deve ter botão de atualizar');
+  assert.ok(mensagensEnviadas[0].texto.includes('DÚVIDAS') || mensagensEnviadas[0].texto.includes('MEDQUEST'));
+  const cbsDuvidasLista = extrairCallbacks(mensagensEnviadas[0].kb);
+  assert.ok(cbsDuvidasLista.includes('ux:hub:rotina'), 'Dúvidas deve ter [🔙 Central de Rotina]');
+  assert.ok(cbsDuvidasLista.includes('ux:hub:inicio'), 'Dúvidas deve ter [🏠 Início]');
+  assert.ok(cbsDuvidasLista.includes('ux:rotina:duvidas_lista'), 'Dúvidas deve ter botão de atualizar');
 
   // 2.4 Briefing Matinal (briefing)
   limparCaptura();
@@ -193,7 +193,7 @@ async function executarTestesCentralRotinaPlantaoUX() {
   ctx.tratarCallbackUX({ id: 'cb7', data: 'ux:rotina:duvida', message: { chat: { id: chatId }, message_id: 107 } });
   assert.ok(mensagensEnviadas.length > 0, 'ux:rotina:duvida deve responder');
   assert.strictEqual(mensagensEnviadas[0].tipo, 'edit', 'Deve editar mensagem in-place');
-  assert.ok(mensagensEnviadas[0].texto.includes('MEDQUEST / DÚVIDAS MÉDICAS'));
+  assert.ok(mensagensEnviadas[0].texto.includes('MEDQUEST') && mensagensEnviadas[0].texto.includes('DÚVIDAS'));
   const cbsDuvida = extrairCallbacks(mensagensEnviadas[0].kb);
   assert.ok(cbsDuvida.includes('ux:hub:rotina'), 'Dúvida deve ter [🔙 Central de Rotina]');
   assert.ok(cbsDuvida.includes('ux:hub:inicio'), 'Dúvida deve ter [🏠 Início]');
@@ -223,13 +223,13 @@ async function executarTestesCentralRotinaPlantaoUX() {
   assert.ok(cbsSlashAgenda.includes('ux:hub:rotina'), '/agenda deve ter [🔙 Central de Rotina]');
   assert.ok(cbsSlashAgenda.includes('ux:hub:inicio'), '/agenda deve ter [🏠 Início]');
 
-  // 3.3 /tasks
+  // 3.3 /duvidas
   limparCaptura();
-  ctx.processarMensagemTexto({ chat: { id: chatId }, text: '/tasks' });
-  assert.ok(mensagensEnviadas.length > 0, '/tasks deve responder');
-  const cbsSlashTasks = extrairCallbacks(mensagensEnviadas[0].kb);
-  assert.ok(cbsSlashTasks.includes('ux:hub:rotina'), '/tasks deve ter [🔙 Central de Rotina]');
-  assert.ok(cbsSlashTasks.includes('ux:hub:inicio'), '/tasks deve ter [🏠 Início]');
+  ctx.processarMensagemTexto({ chat: { id: chatId }, text: '/duvidas' });
+  assert.ok(mensagensEnviadas.length > 0, '/duvidas deve responder');
+  const cbsSlashDuvidas = extrairCallbacks(mensagensEnviadas[0].kb);
+  assert.ok(cbsSlashDuvidas.includes('ux:hub:rotina'), '/duvidas deve ter [🔙 Central de Rotina]');
+  assert.ok(cbsSlashDuvidas.includes('ux:hub:inicio'), '/duvidas deve ter [🏠 Início]');
 
   // 3.4 /briefing
   limparCaptura();

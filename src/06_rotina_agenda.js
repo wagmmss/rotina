@@ -520,16 +520,14 @@ var RotinaService = {
     var alterado = false;
     var resumoAcao = "";
 
-    // 1.1. Remoção ou cancelamento explícito de plantão (incluindo plantões de sniper ou testes)
-    if (/(?:remover|excluir|apagar|tirar|cancelar|dispensar)\s+(?:o\s+)?(?:plant[aã]o|cobertura|sniper)/i.test(instLower) ||
+    // 1.1. Remoção ou cancelamento explícito de plantão
+    if (/(?:remover|excluir|apagar|tirar|cancelar|dispensar)\s+(?:o\s+)?(?:plant[aã]o|cobertura)/i.test(instLower) ||
         /(?:n[aã]o\s+vou|sem)\s+(?:ter\s+)?plant[aã]o/i.test(instLower)) {
       var blocosSemPlantao = [];
       var removidos = 0;
       for (var ip = 0; ip < blocos.length; ip++) {
         var bp = blocos[ip];
         var ehPlantao = bp.categoria === "plantao" ||
-          (bp.id && String(bp.id).indexOf("plantao_sniper_") === 0) ||
-          (bp.nota && bp.nota.indexOf("Sniper") !== -1) ||
           /plant[aã]o/i.test(bp.titulo || "");
         if (ehPlantao) {
           removidos++;
@@ -1548,4 +1546,123 @@ function gerarResumoFimPlantao(chatIdDestino, messageId) {
   }
   return enviarMensagemComTecladoParaChat(destino, msg, botoes);
 }
+
+/**
+ * Marca proativamente hábitos detectados em texto/áudio no armazenamento local
+ */
+function marcarHabitoProativoHoje(textoRelato) {
+  var texto = String(textoRelato || "").toLowerCase();
+  if (!texto) return [];
+
+  var tz = (typeof ConfigService !== "undefined" && ConfigService.get)
+    ? ConfigService.get("TIMEZONE", "America/Sao_Paulo")
+    : "America/Sao_Paulo";
+  var dataISO = (typeof Utilities !== "undefined" && Utilities.formatDate)
+    ? Utilities.formatDate(new Date(), tz, "yyyy-MM-dd")
+    : new Date().toISOString().slice(0, 10);
+
+  var regras = [
+    { key: "habit_medquest", label: "🧠 MedQuest", regex: /\b(?:medquest|quest[oõ]es|anki|flashcard|estudei)\b/i },
+    { key: "habit_gym", label: "🏋️ Treino / Academia", regex: /\b(?:trein(?:o|ei)|academia|muscula[çc][aã]o|corrida|cardio)\b/i },
+    { key: "habit_english", label: "📚 Inglês", regex: /\b(?:ingl[eê]s|english|listening|shadowing)\b/i },
+    { key: "habit_guitar", label: "🎸 Violão", regex: /\b(?:viol[aã]o|m[uú]sica|toquei)\b/i },
+    { key: "habit_reading", label: "📖 Leitura", regex: /\b(?:li\s+\d+|leitura|livro|cap[ií]tulo)\b/i },
+    { key: "habit_love", label: "❤️ Tempo de Qualidade", regex: /\b(?:namorada|encontro|date)\b/i }
+  ];
+
+  var marcados = [];
+  var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+    ? PropertiesService.getScriptProperties()
+    : null;
+
+  for (var i = 0; i < regras.length; i++) {
+    if (regras[i].regex.test(texto)) {
+      if (props) {
+        try {
+          props.setProperty("habito_" + dataISO + "_" + regras[i].key, "true");
+        } catch (_) {}
+      }
+      marcados.push(regras[i].label);
+    }
+  }
+  return marcados;
+}
+
+/**
+ * Relatório Semanal Local de Hábitos & Energia (/semana, /relatorio, /habitos)
+ */
+function enviarRelatorioSemanalHabitos(chatIdDestino, messageId) {
+  var destino = chatIdDestino || ((typeof ConfigService !== "undefined" && ConfigService.getPrimary)
+    ? ConfigService.getPrimary("TELEGRAM_CHAT_ID")
+    : String((typeof ConfigService !== "undefined" && ConfigService.get("TELEGRAM_CHAT_ID")) || "").split(",")[0].trim());
+
+  if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(destino)) {
+    return false;
+  }
+
+  var tz = (typeof ConfigService !== "undefined" && ConfigService.get)
+    ? ConfigService.get("TIMEZONE", "America/Sao_Paulo")
+    : "America/Sao_Paulo";
+  var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+    ? PropertiesService.getScriptProperties()
+    : null;
+  var allProps = props ? (props.getProperties() || {}) : {};
+
+  var habitosDefs = [
+    { key: "habit_medquest", label: "🧠 MedQuest / Estudo", count: 0 },
+    { key: "habit_gym", label: "🏋️ Treino / Academia", count: 0 },
+    { key: "habit_english", label: "📚 Inglês", count: 0 },
+    { key: "habit_guitar", label: "🎸 Violão", count: 0 },
+    { key: "habit_reading", label: "📖 Leitura", count: 0 },
+    { key: "habit_love", label: "❤️ Tempo de Qualidade", count: 0 }
+  ];
+
+  var somaEnergia = 0;
+  var diasEnergia = 0;
+  var hoje = new Date();
+
+  for (var d = 0; d < 7; d++) {
+    var dia = new Date(hoje.getTime() - (d * 86400000));
+    var dISO = (typeof Utilities !== "undefined" && Utilities.formatDate)
+      ? Utilities.formatDate(dia, tz, "yyyy-MM-dd")
+      : dia.toISOString().slice(0, 10);
+
+    for (var h = 0; h < habitosDefs.length; h++) {
+      if (allProps["habito_" + dISO + "_" + habitosDefs[h].key] === "true") {
+        habitosDefs[h].count++;
+      }
+    }
+    var energiaRaw = allProps["habito_" + dISO + "_energia"];
+    if (energiaRaw) {
+      var eNum = parseInt(energiaRaw, 10);
+      if (!isNaN(eNum) && eNum >= 1 && eNum <= 5) {
+        somaEnergia += eNum;
+        diasEnergia++;
+      }
+    }
+  }
+
+  var mediaEnergia = diasEnergia > 0 ? (somaEnergia / diasEnergia).toFixed(1) + "/5.0" : "Sem registros";
+  var msg = "📊 *RELATÓRIO SEMANAL DE HÁBITOS (ÚLTIMOS 7 DIAS)*\n\n";
+  for (var idx = 0; idx < habitosDefs.length; idx++) {
+    var item = habitosDefs[idx];
+    var pct = Math.round((item.count / 7) * 100);
+    msg += "• " + item.label + ": *" + item.count + "/7 dias* (`" + pct + "%`)\n";
+  }
+  msg += "\n🔋 *Energia Média:* " + mediaEnergia + " (" + diasEnergia + " dia(s) avaliado(s))\n" +
+    "💾 _Persistido localmente em memória rápida._";
+
+  var kb = {
+    inline_keyboard: [
+      [{ text: "🌙 Check-in Hoje", callback_data: "ux:rotina:checkin" }, { text: "📊 Aderência Timeline", callback_data: "rotina:aderencia" }],
+      [{ text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" }, { text: "🏠 Início", callback_data: "ux:hub:inicio" }]
+    ]
+  };
+
+  if (messageId && typeof enviarTelaBot === "function") {
+    return enviarTelaBot(destino, msg, kb, messageId);
+  }
+  return enviarMensagemComTecladoParaChat(destino, msg, kb);
+}
+
 

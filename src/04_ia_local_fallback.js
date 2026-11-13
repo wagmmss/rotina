@@ -458,10 +458,8 @@ var IaLocalFallbackService = (function () {
       intencao = 'ENFERMARIA';
     } else if (t.indexOf('plantao') !== -1 || t.indexOf('agenda') !== -1 || t.indexOf('consulta') !== -1 || t.indexOf('marcar') !== -1) {
       intencao = 'CALENDAR_CRIAR';
-    } else if (t.indexOf('tarefa') !== -1 || t.indexOf('notion') !== -1 || t.indexOf('lembrete') !== -1) {
-      intencao = 'NOTION_TASK';
     } else if (t.indexOf('duvida') !== -1 || t.indexOf('estudo') !== -1 || t.indexOf('medquest') !== -1) {
-      intencao = 'NOTION_DUVIDA';
+      intencao = 'ESTUDO_DUVIDA';
     }
 
     var ehSoap = s.indexOf('soap') !== -1 || s.indexOf('subjetivo') !== -1 || t.indexOf('soap') !== -1;

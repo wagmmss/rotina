@@ -149,7 +149,7 @@ async function executarTestesOnboardingEAjuda() {
 
   console.log('[TESTE 10] Bloqueio de comandos de rotina/notion para convidado');
   limpar();
-  const cmdsBloqueados = ['/rotina', '/agenda', '/habitos', '/task', '/briefing', '/checkin'];
+  const cmdsBloqueados = ['/rotina', '/agenda', '/habitos', '/duvida', '/semana', '/briefing', '/checkin'];
   for (const cmd of cmdsBloqueados) {
     limpar();
     const res = ctx.despacharComandosAgendaRotinaEAudio_(cmd, cmd, idConvidado);

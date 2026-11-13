@@ -57,9 +57,9 @@ async function runAjudaTests() {
     });
   });
 
-  assert.strictEqual(totalCmds, 80, 'Devem existir exatamente 80 comandos funcionais canônicos');
-  assert.strictEqual(slashCmdsSet.size, 80, 'Cada função clínica deve ter seu único comando slash sem redundâncias');
-  console.log(`  ✓ 17 categorias, 80 funções clínicas e exatamente 80 comandos slash padronizados.`);
+  assert.strictEqual(totalCmds, 79, 'Devem existir exatamente 79 comandos funcionais canônicos');
+  assert.strictEqual(slashCmdsSet.size, 79, 'Cada função clínica deve ter seu único comando slash sem redundâncias');
+  console.log(`  ✓ 17 categorias, 79 funções clínicas e exatamente 79 comandos slash padronizados.`);
 
   // 1.1 Validar que Categoria Exame Físico possui estritamente /ef com botões interativos
   const catEf = catalogo.find(c => c.id === 'exame_fisico');
@@ -81,7 +81,7 @@ async function runAjudaTests() {
   assert.ok(mensagensEnviadas.length > 0, 'Deve enviar mensagem');
   const msgAjuda = mensagensEnviadas[0].texto;
   assert.ok(msgAjuda.includes('MANUAL DE COMANDOS CANÔNICOS'), 'Deve conter cabeçalho canônico');
-  assert.ok(msgAjuda.includes('80 comandos padronizados'), 'Deve referenciar os 80 comandos padronizados');
+  assert.ok(msgAjuda.includes('79 comandos padronizados'), 'Deve referenciar os 79 comandos padronizados');
   assert.ok(msgAjuda.includes('NÚCLEO, SESSÃO, NAVEGAÇÃO & COCKPIT'), 'Deve conter categoria núcleo');
   assert.ok(msgAjuda.includes('SALA VERMELHA & CTI'), 'Deve conter categoria emergência');
   assert.ok(msgAjuda.includes('PEDIATRIA & SUPORTE VITAL'), 'Deve conter categoria pediatria');

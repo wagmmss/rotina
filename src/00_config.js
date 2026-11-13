@@ -1554,9 +1554,6 @@ var ConfigService = (function() {
 // Variáveis globais de compatibilidade
 var TELEGRAM_BOT_TOKEN = ConfigService.get("TELEGRAM_BOT_TOKEN");
 var TELEGRAM_CHAT_ID = ConfigService.get("TELEGRAM_CHAT_ID");
-var NOTION_TOKEN = ConfigService.get("NOTION_TOKEN");
-var NOTION_HABIT_LOG_DB_ID = ConfigService.get("NOTION_HABIT_LOG_DB_ID");
-var NOTION_TASKS_DB_ID = ConfigService.get("NOTION_TASKS_DB_ID");
 var PROVEDOR_TEXTO_PADRAO = ConfigService.get("PROVEDOR_TEXTO_PADRAO", "GEMINI");
 var GROQ_API_KEY = ConfigService.get("GROQ_API_KEY");
 var OPENROUTER_API_KEY = ConfigService.get("OPENROUTER_API_KEY");
@@ -1566,11 +1563,8 @@ var LOCAL_LLM_URL = ConfigService.get("LOCAL_LLM_URL", "http://127.0.0.1:11434/v
 var LOCAL_LLM_API_KEY = ConfigService.get("LOCAL_LLM_API_KEY", "ollama");
 var IA_MODELOS_LOCAL = ConfigService.getArray("IA_MODELOS_LOCAL");
 var TIMEZONE = ConfigService.get("TIMEZONE", "America/Sao_Paulo");
-var SPREADSHEET_ID_REMUME = ConfigService.get("SPREADSHEET_ID_REMUME");
-var SPREADSHEET_ID_INTERACOES = ConfigService.get("SPREADSHEET_ID_INTERACOES");
 var WEB_APP_URL = ConfigService.get("WEB_APP_URL");
 var IA_LOCAL_ENDPOINT = ConfigService.get("IA_LOCAL_ENDPOINT");
-var IA_MODELOS_LOCAL = ConfigService.get("IA_MODELOS_LOCAL");
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = ConfigService;

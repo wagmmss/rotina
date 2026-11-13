@@ -189,7 +189,7 @@ ctx.processarMensagemTexto({ chat: { id: chatIdTitular }, text: '/alta' });
 assert.ok(msgEnviadasF1.length > 0, '/alta deve responder como alias');
 
 msgEnviadasF1 = [];
-ctx.processarMensagemTexto({ chat: { id: chatIdTitular }, text: '/tasks' });
-assert.ok(msgEnviadasF1.length > 0, '/tasks deve responder como alias');
+ctx.processarMensagemTexto({ chat: { id: chatIdTitular }, text: '/duvidas' });
+assert.ok(msgEnviadasF1.length > 0, '/duvidas deve responder como comando local de estudos');
 
 console.log('🎉 TODOS OS TESTES DE SIMPLIFICAÇÃO, EXPURGO E CONDUTA BEIRA-LEITO PASSARAM COM 100% DE SUCESSO!');

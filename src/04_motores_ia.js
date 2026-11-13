@@ -35,7 +35,7 @@ var IA_PADROES = {
 
 var IA_INTENCOES_VALIDAS = [
   "PRECEPTOR_VOZ", "EVIDENCIA_MEDICA", "CLINICO_EMERGENCIA", "CLINICO_SOAP", "CLINICO_RX",
-  "CLINICO_GASO", "CALENDAR_CRIAR", "CALENDAR_CONSULTAR", "NOTION_TASK", "NOTION_DUVIDA",
+  "CLINICO_GASO", "CALENDAR_CRIAR", "CALENDAR_CONSULTAR", "ESTUDO_DUVIDA",
   "HABITO_PROATIVO", "ENFERMARIA", "CONVERSA"
 ];
 
@@ -648,7 +648,7 @@ function chamarVertexAIGemini(parts, systemPrompt, opcoes) {
 
   var projectId = auth.projectId || VertexAuthService.getProjectId();
   var primaryLoc = opcoes.location || ConfigService.get("VERTEX_LOCATION", VertexAuthService.getLocation() || "global");
-  var primaryModel = opcoes.model || ConfigService.get("VERTEX_MODEL", VertexAuthService.getModel() || "gemini-2.5-flash");
+  var primaryModel = opcoes.model || ConfigService.get("VERTEX_MODEL", VertexAuthService.getModel() || "gemini-4-hydrogen");
 
   // Lista de tentativas na Vertex AI (Prioridade 1: gemini-4-argon em global)
   var rotasVertex = [
@@ -3428,8 +3428,8 @@ function classificarIntencaoMensagem(textoMensagem) {
   if (/\b(?:gaso|gasometria)\b/i.test(t) || (t.indexOf("ph") !== -1 && (t.indexOf("pco2") !== -1 || t.indexOf("hco3") !== -1 || t.indexOf("bicarb") !== -1 || /\bbic\b/.test(tn)))) {
     return { intencao: "CLINICO_GASO", confianca: 0.95 };
   }
-  if ((t.indexOf("dúvida") !== -1 || t.indexOf("duvida") !== -1) && (t.indexOf("medquest") !== -1 || t.indexOf("notion") !== -1 || t.indexOf("card") !== -1 || t.indexOf("flashcard") !== -1)) {
-    return { intencao: "NOTION_DUVIDA", confianca: 0.85 };
+  if ((t.indexOf("dúvida") !== -1 || t.indexOf("duvida") !== -1) && (t.indexOf("medquest") !== -1 || t.indexOf("estudo") !== -1 || t.indexOf("card") !== -1 || t.indexOf("flashcard") !== -1)) {
+    return { intencao: "ESTUDO_DUVIDA", confianca: 0.85 };
   }
   if (/(?:evid[êe]ncia|pubmed|artigos?\s+(?:sobre|de)|estudos?\s+(?:sobre|de)|meta-an[áa]lise|ensaios?\s+cl[íi]nicos?)/i.test(t)) {
     return { intencao: "EVIDENCIA_MEDICA", confianca: 0.95 };
@@ -3766,30 +3766,6 @@ function gerarCriticaSocraticaPreceptor(casoOuLeitoTexto) {
   return ctxCrit.saudacao + ", qual o principal risco de descompensação aguda desse paciente nas próximas duas horas e qual a sua conduta imediata?";
 }
 
-/**
- * Geração de Áudio Direta em Modo Rápido (Single-Pass Voice Generation)
- * Emite a fala do Preceptor Socrático diretamente em áudio (WAV) em uma única requisição ao Gemini 2.0 Flash.
- * Corta pela metade a latência de geração, eliminando a chamada intermediária de geração de texto.
- */
-function gerarAudioPreceptorDireto(casoOuDuvida, opcoes) {
-  opcoes = opcoes || {};
-  var textoPronto = opcoes.textoPronto ? String(opcoes.textoPronto).trim() : "";
-  var textoCaso = String(casoOuDuvida || "").trim();
-  if (!textoCaso && !textoPronto) return null;
-
-  var textoProvocacao = textoPronto ? _iaTextoFalado(textoPronto) : gerarProvocacaoPreceptorAudio(textoCaso);
-  if (!textoProvocacao) return null;
-
-  var blobAudio = sintetizarVozPreceptor(textoProvocacao);
-  if (!blobAudio) return null;
-
-  return {
-    audioBlob: blobAudio,
-    texto: textoProvocacao,
-    direto: true
-  };
-}
-
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     chamarMotorIaComFallback: chamarMotorIaComFallback,
@@ -3818,7 +3794,6 @@ if (typeof module !== "undefined" && module.exports) {
     gerarDialogoPreceptorSocratico: gerarDialogoPreceptorSocratico,
     extrairDadosEventoCalendario: extrairDadosEventoCalendario,
     gerarCriticaSocraticaPreceptor: gerarCriticaSocraticaPreceptor,
-    gerarAudioPreceptorDireto: gerarAudioPreceptorDireto,
     gerarGuiaExameFisicoEspecial: gerarGuiaExameFisicoEspecial,
     processarAudioClinicoMultimodal: processarAudioClinicoMultimodal,
     analisarImagemMedicaComIA: analisarImagemMedicaComIA,

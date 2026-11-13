@@ -216,7 +216,7 @@ function processarMensagemVoz(message) {
         } else {
           safePutCache(contextoCache, contextoKey, casoAudio, 900);
         }
-        return responderPreceptorVozComIA(chatId, casoAudio);
+        return responderPreceptorVozComIA(chatId, casoAudio, { ehAudio: true });
       }
 
       // 1. DITADO DE CORREDOR: Se for evolução de leito em tempo único:

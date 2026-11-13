@@ -4,7 +4,6 @@ function roundMs(value) {
 }
 
 function updateKind(update) {
-  if (update.inline_query) return 'inline_query';
   if (update.callback_query) return 'callback';
   const message = update.message || {};
   if (message.web_app_data) return 'web_app_data';

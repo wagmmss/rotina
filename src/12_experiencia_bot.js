@@ -168,16 +168,6 @@ var _ultimoEnvioTelaTimestamp = {};
 
 function enviarTelaBot(chat, texto, kb, messageId) {
   if (messageId && String(texto).length < UX_MAX_EDIT_CHARS) {
-    var agora = Date.now();
-    var chaveThrottle = String(chat) + '_' + String(messageId);
-    var deltaEnvio = agora - (_ultimoEnvioTelaTimestamp[chaveThrottle] || 0);
-
-    // Cooldown defensivo anti-429: se duas edições quase simultâneas (< 40ms) ocorrerem, protege o limite da API
-    if (deltaEnvio < 40 && typeof Utilities !== 'undefined' && typeof Utilities.sleep === 'function') {
-      try { Utilities.sleep(40); } catch (_) {}
-    }
-    _ultimoEnvioTelaTimestamp[chaveThrottle] = Date.now();
-
     var contemHtml = /<\/?(?:b|i|u|s|code|pre|a)\b/i.test(texto);
     var parseMode = contemHtml ? 'HTML' : 'Markdown';
     var textoEnvio = contemHtml
@@ -2402,7 +2392,7 @@ function tratarCallbackUXCalc(chat, v, msgId) {
 
 function enviarRotinaBot(chat, messageId) {
   if (typeof ehUsuarioTitular === 'function' && !ehUsuarioTitular(chat)) {
-    return enviarTelaBot(chat, "🔒 *Recurso Restrito ao Titular*\n\nA central de rotina, lifestyle e agenda do Notion é exclusiva do administrador da conta.\n\nUse o botão abaixo para voltar ao início.", botoesBot([
+    return enviarTelaBot(chat, "🔒 *Recurso Restrito ao Titular*\n\nA central de rotina, lifestyle e agenda pessoal é exclusiva do administrador da conta.\n\nUse o botão abaixo para voltar ao início.", botoesBot([
       [['🏠 Início', 'ux:hub:inicio']]
     ]), messageId);
   }
@@ -2415,7 +2405,7 @@ function enviarRotinaBot(chat, messageId) {
               "Selecione uma opção rápida:";
 
   var botoes = botoesBot([
-    [['🎯 Sniper de Plantões', 'sniper:painel'], ['🔄 Restaurar Padrão', 'rotina:reset']],
+    [['🧠 Dúvidas Estudo', 'ux:rotina:duvidas_lista'], ['🔄 Restaurar Padrão', 'rotina:reset']],
     [['📆 Agenda de Hoje', 'ux:rotina:agenda'], ['📆 Agenda de Amanhã', 'ux:rotina:agenda_amanha']],
     [['☀️ Briefing Matinal', 'ux:rotina:briefing'], ['🌙 Check-in Noturno', 'ux:rotina:checkin']],
     [['🏠 Início', 'ux:hub:inicio']]
@@ -4625,14 +4615,12 @@ function tratarCallbackUX(cb) {
       } else {
         if (typeof ehUsuarioTitular === 'function' && !ehUsuarioTitular(chat)) {
           var kbRestrito = botoesBot([[['🏠 Início', 'ux:hub:inicio']]]);
-          return enviarTelaBot(chat, '🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Notion, Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use o início para acessar calculadoras, condutas e guias clínicos.', kbRestrito, msgId);
+          return enviarTelaBot(chat, '🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use o início para acessar calculadoras, condutas e guias clínicos.', kbRestrito, msgId);
         }
         if (v === 'agenda') {
           return consultarEventosAgenda('', chat, msgId);
         } else if (v === 'agenda_amanha') {
           return consultarEventosAgenda('amanha', chat, msgId);
-        } else if (v === 'tasks') {
-          return listarTarefasHojeNotion(chat, msgId);
         } else if (v === 'briefing') {
           return enviarBriefingMatinal(chat, true, msgId);
         } else if (v === 'checkin') {

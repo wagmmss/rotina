@@ -185,7 +185,6 @@ function processarRespostaPreceptorSocratico(chatId, textoResposta, ehAudio) {
  */
 function responderPreceptorVozComIA(chatId, casoOuDuvida, opcoes) {
   opcoes = opcoes || {};
-  enviarChatAction(chatId, "record_voice", true);
 
   var kbAcoes = {
     "inline_keyboard": [
@@ -196,26 +195,23 @@ function responderPreceptorVozComIA(chatId, casoOuDuvida, opcoes) {
     ]
   };
 
-function extrairTextoLocucaoSoap_(texto) {
-  if (!texto) return "";
-  var t = String(texto).trim();
-  var matchAvaliacao = t.match(/(?:🧠\s*\*?AVALIA[ÇC][ÃA]O|Hipótese|Conduta)[\s\S]*/i);
-  if (matchAvaliacao && matchAvaliacao[0].length >= 30) {
-    return matchAvaliacao[0].trim();
+  function extrairTextoLocucaoSoap_(texto) {
+    if (!texto) return "";
+    var t = String(texto).trim();
+    var matchAvaliacao = t.match(/(?:🧠\s*\*?AVALIA[ÇC][ÃA]O|Hipótese|Conduta)[\s\S]*/i);
+    if (matchAvaliacao && matchAvaliacao[0].length >= 30) {
+      return matchAvaliacao[0].trim();
+    }
+    return t;
   }
-  return t;
-}
 
-  // Se opcoes.apenasNarrar === true ou se opcoes.textoPronto foi fornecido, pula a geração de texto e vai direto para TTS
-  // (usado pelo callback "Ouvir no Fone" para narrar texto já existente)
+  // 1. Narração sob demanda (botão "🎧 Ouvir no Fone" ou apenasNarrar): síntese TTS direta sem rechamada de LLM
   var textoBaseNarrar = (opcoes && opcoes.textoPronto) || (opcoes && opcoes.apenasNarrar && casoOuDuvida);
   if (textoBaseNarrar) {
     enviarChatAction(chatId, "record_voice", true);
     var textoLocucao = extrairTextoLocucaoSoap_(textoBaseNarrar);
-    var resDireto = (typeof gerarAudioPreceptorDireto === "function")
-      ? gerarAudioPreceptorDireto(null, { textoPronto: textoLocucao })
-      : null;
-    var blobNarrado = (resDireto && resDireto.audioBlob) || sintetizarVozPreceptor(typeof _iaTextoFalado === "function" ? _iaTextoFalado(textoLocucao) : textoLocucao);
+    var textoFalado = (typeof _iaTextoFalado === "function") ? _iaTextoFalado(textoLocucao) : textoLocucao;
+    var blobNarrado = sintetizarVozPreceptor(textoFalado);
     if (blobNarrado) {
       var resumoLegenda = String(textoLocucao).trim();
       if (resumoLegenda.length > 750) {
@@ -231,61 +227,15 @@ function extrairTextoLocucaoSoap_(texto) {
       var enviadoNarrado = enviarAudioVozTelegram(chatId, blobNarrado, legendaNarrada, kbAcoes);
       if (enviadoNarrado) return true;
     }
-    // Se a síntese ou envio falhar, emite aviso claro sem poluir o chat com duplicação de texto
     return enviarMensagemParaChat(
       chatId,
-      "⚠️ *Transmissão de Áudio:* Não foi possível processar a locução de voz no momento devido a indisponibilidade temporária. O caso clínico e as condutas permanecem disponíveis acima."
+      "⚠️ *Transmissão de Áudio:* Não foi possível processar a locução de voz no momento. O caso clínico e as condutas permanecem disponíveis acima."
     );
   }
 
-  // Variável que preserva texto entre modo direto e fallback,
-  // evitando chamar o LLM de novo se apenas o TTS falhou
-  var textoGeradoDireto = null;
-
-  // 1. MODO RÁPIDO: Geração direta de áudio em tempo único (Single-Pass Audio)
-  if (typeof gerarAudioPreceptorDireto === "function") {
-    try {
-      var resDireto = gerarAudioPreceptorDireto(casoOuDuvida, opcoes);
-      if (resDireto && resDireto.audioBlob) {
-        enviarChatAction(chatId, "record_voice", true);
-        if (typeof renovarChatActionSeNecessario === "function") {
-          renovarChatActionSeNecessario(chatId, "record_voice");
-        }
-        var txtDir = String(resDireto.texto || "");
-        var numAstDir = (txtDir.match(/\*/g) || []).length;
-        if (numAstDir % 2 !== 0) txtDir += "*";
-        var numCrDir = (txtDir.match(/`/g) || []).length;
-        if (numCrDir % 2 !== 0) txtDir += "`";
-        var legendaDireta = "🎧 *Preceptor Socrático:*\n" + txtDir;
-        salvarDialogoPreceptor(chatId, {
-          em_andamento: true,
-          caso_base: casoOuDuvida,
-          ultima_pergunta: resDireto.texto,
-          historico: [{ papel: "preceptor", texto: resDireto.texto }]
-        });
-        if (typeof definirModoBot !== "undefined") {
-          definirModoBot(chatId, "voz", casoOuDuvida);
-        }
-        var enviadoDireto = enviarAudioVozTelegram(chatId, resDireto.audioBlob, legendaDireta, kbAcoes);
-        if (enviadoDireto) return true;
-      }
-      // Se o modo direto gerou texto mas o envio/TTS falhou,
-      // preserva o texto para o fallback não precisar chamar o LLM de novo
-      if (resDireto && resDireto.texto) {
-        textoGeradoDireto = resDireto.texto;
-      }
-    } catch (eDireto) {
-      Logger.log("Geração direta de áudio falhou; recorrendo ao modo em dois tempos: " + eDireto.message);
-    }
-  }
-
-  // 2. FALLBACK RESILIENTE EM DOIS TEMPOS (Texto -> TTS)
-  // CORREÇÃO: reutiliza textoGeradoDireto se disponível, evitando chamada LLM redundante
-  enviarChatAction(chatId, "record_voice", true);
-  if (typeof renovarChatActionSeNecessario === "function") {
-    renovarChatActionSeNecessario(chatId, "record_voice");
-  }
-  var provocacao = textoGeradoDireto || gerarProvocacaoPreceptorAudio(casoOuDuvida);
+  // 2. Geração única da provocação socrática (sem geração duplicada)
+  enviarChatAction(chatId, opcoes.ehAudio ? "record_voice" : "typing", true);
+  var provocacao = (typeof gerarProvocacaoPreceptorAudio === "function") ? gerarProvocacaoPreceptorAudio(casoOuDuvida) : "";
   if (!provocacao) {
     provocacao = "Diante deste quadro clínico, qual é a principal hipótese diagnóstica e a conduta imediata para descartar gravidade?";
   }
@@ -299,18 +249,21 @@ function extrairTextoLocucaoSoap_(texto) {
     definirModoBot(chatId, "voz", casoOuDuvida);
   }
 
-  enviarChatAction(chatId, "record_voice", true);
-  if (typeof renovarChatActionSeNecessario === "function") {
-    renovarChatActionSeNecessario(chatId, "record_voice");
-  }
-  var audioBlob = sintetizarVozPreceptor(provocacao);
-  if (audioBlob) {
-    var legenda = "🎧 *Preceptor Socrático:*\n" + provocacao;
-    var enviado = enviarAudioVozTelegram(chatId, audioBlob, legenda, kbAcoes);
-    if (enviado) return true;
+  // 3. Só sintetiza áudio automaticamente se o usuário enviou áudio originalmente
+  if (opcoes.ehAudio) {
+    enviarChatAction(chatId, "record_voice", true);
+    if (typeof renovarChatActionSeNecessario === "function") {
+      renovarChatActionSeNecessario(chatId, "record_voice");
+    }
+    var audioBlob = sintetizarVozPreceptor(provocacao);
+    if (audioBlob) {
+      var legenda = "🎧 *Preceptor Socrático:*\n" + provocacao;
+      var enviado = enviarAudioVozTelegram(chatId, audioBlob, legenda, kbAcoes);
+      if (enviado) return true;
+    }
   }
 
-  // 3. FALLBACK FINAL EM TEXTO COM BOTÃO INLINE
+  // 4. Padrão rápido para texto (ou fallback de áudio): resposta imediata com botão "🎧 Ouvir no Fone"
   var cacheKey = Utilities.getUuid().replace(/-/g, "");
   safePutCache(CacheService.getScriptCache(), cacheKey, provocacao, 21600);
   var kbTexto = {

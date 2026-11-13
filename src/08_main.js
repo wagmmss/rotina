@@ -13,22 +13,9 @@ function doGet(e) {
       // Mesma política do worker: nunca descarta pedidos pendentes ou falhas sem arquivo.
       manterPersistenciaBot();
     }
-    if(e.parameter.action==="poll_pc_tasks") {
-      var tasks = (typeof obterTarefasPcPendentes === "function") ? obterTarefasPcPendentes() : [];
-      return ContentService.createTextOutput(JSON.stringify({ok: true, tasks: tasks})).setMimeType(ContentService.MimeType.JSON);
-    }
-    if(e.parameter.action==="complete_pc_task") {
-      var tid = e.parameter.task_id;
-      var st = e.parameter.status || "done";
-      var res = e.parameter.resultado || "";
-      if (typeof concluirTarefaPc === "function") {
-        concluirTarefaPc(tid, st, res);
-      }
-      return ContentService.createTextOutput(JSON.stringify({ok: true, task_id: tid, status: st})).setMimeType(ContentService.MimeType.JSON);
-    }
-    info.configured=["TELEGRAM_BOT_TOKEN","TELEGRAM_CHAT_ID","WEB_APP_URL","WEBHOOK_SECRET","NOTION_TOKEN","NOTION_TASKS_DB_ID","NOTION_HABIT_LOG_DB_ID","SPREADSHEET_ID_REMUME","SPREADSHEET_ID_INTERACOES"].filter(function(k){return !!ConfigService.get(k);});
+    info.configured=["TELEGRAM_BOT_TOKEN","TELEGRAM_CHAT_ID","WEB_APP_URL","WEBHOOK_SECRET"].filter(function(k){return !!ConfigService.get(k);});
     info.gemini_keys_count=ConfigService.getArray("GEMINI_API_KEYS").length;
-    info.worker=ScriptApp.getProjectTriggers().some(function(t){return t.getHandlerFunction()==="processarFilaTelegram";});
+    info.worker=(typeof ScriptApp !== "undefined" && ScriptApp.getProjectTriggers) ? ScriptApp.getProjectTriggers().some(function(t){return t.getHandlerFunction()==="processarFilaTelegram";}) : true;
     var filaAll=PersistenciaBot.snapshot();
     info.queue=PersistenciaBot.chaves("inbox_",filaAll).length;
     info.outbox=PersistenciaBot.listar("outbox_",filaAll).map(function(r){return {id:r.key,status:r.valor.status||"unknown"};});
@@ -117,7 +104,7 @@ function doPost(e) {
       try {
         var cfg = JSON.parse(e.postData.contents);
         var props = PropertiesService.getScriptProperties();
-        var chavesPermitidas = ["GEMINI_API_KEYS", "PROVEDOR_TEXTO_PADRAO", "SPREADSHEET_ID_REMUME", "SPREADSHEET_ID_INTERACOES", "PESO_ATUAL", "BF_ATUAL", "MOUNJARO_SEMANA", "MOUNJARO_DOSE"];
+        var chavesPermitidas = ["GEMINI_API_KEYS", "PROVEDOR_TEXTO_PADRAO", "PESO_ATUAL", "BF_ATUAL", "MOUNJARO_SEMANA", "MOUNJARO_DOSE"];
         chavesPermitidas.forEach(function(k) {
           if (cfg[k] !== undefined && cfg[k] !== null && cfg[k] !== "") {
             props.setProperty(k, typeof cfg[k] === "string" ? cfg[k] : JSON.stringify(cfg[k]));
@@ -139,8 +126,6 @@ function doPost(e) {
     remetenteId = String(u.message.chat.id);
   } else if (u.callback_query && u.callback_query.message && u.callback_query.message.chat) {
     remetenteId = String(u.callback_query.message.chat.id);
-  } else if (u.inline_query && u.inline_query.from) {
-    remetenteId = String(u.inline_query.from.id);
   }
 
   var allowedList = (typeof ConfigService.getArray === "function")
@@ -148,14 +133,6 @@ function doPost(e) {
     : String(allowed).split(",").map(function(s){ return String(s).trim(); });
 
   if (!remetenteId || allowedList.indexOf(remetenteId) === -1) return HtmlService.createHtmlOutput("Forbidden");
-
-  // Fast-Path de resposta instantânea para consultas em linha (@bot)
-  if (u.inline_query) {
-    if (typeof processarInlineQuery === "function") {
-      processarInlineQuery(u.inline_query);
-    }
-    return HtmlService.createHtmlOutput("OK");
-  }
 
   if (u.callback_query) {
     destravarCallbackTelegramImediato(u.callback_query);
@@ -216,16 +193,15 @@ function configurarWebhookTelegram() {
   var secret=ConfigService.exigir("WEBHOOK_SECRET");
   var response=UrlFetchApp.fetch("https://api.telegram.org/bot"+token+"/setWebhook", {
     method:"post",contentType:"application/json",muteHttpExceptions:true,
-    payload:JSON.stringify({url:url.split("?")[0]+"?secret="+encodeURIComponent(secret),secret_token:secret,drop_pending_updates:false,max_connections:1,allowed_updates:["message","callback_query","inline_query"]})
+    payload:JSON.stringify({url:url.split("?")[0]+"?secret="+encodeURIComponent(secret),secret_token:secret,drop_pending_updates:false,max_connections:40,allowed_updates:["message","callback_query"]})
   });
   if(response.getResponseCode()!==200 || !JSON.parse(response.getContentText()).ok) throw new Error("Falha ao registrar webhook.");
-  if(!ScriptApp.getProjectTriggers().some(function(t){return t.getHandlerFunction()==="processarFilaTelegram";})) ScriptApp.newTrigger("processarFilaTelegram").timeBased().everyMinutes(1).create();
   return {ok:true};
 }
 
 // Catálogo de referência dos comandos aceitos pelo bot no chat
 var COMANDOS_CLINICOS_CATALOGO = [
-  "gaso", "conduta", "task", "tasks", "duvida", "dva", "sri", "agenda", "plantao_fim", "teclado",
+  "gaso", "conduta", "duvida", "dva", "sri", "agenda", "plantao_fim", "teclado",
   "soap", "rx", "enfermaria", "leito", "passagem", "alta", "round", "calc", "manual"
 ];
 

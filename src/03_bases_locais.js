@@ -264,20 +264,37 @@ function obterPlanilha(cachePrefix, idPlanilha, isInteracao, forcarAtualizacao) 
     if (salvo !== null) return salvo;
   }
   var conteudo = "";
-  try {
-    var ss = SpreadsheetApp.openById(idPlanilha, isInteracao);
-    var sheet = ss.getSheets()[0];
-    var lastRow = sheet.getLastRow();
-    var lastCol = isInteracao ? sheet.getLastColumn() : 1;
-    if (lastRow > 1 && lastCol > 0) {
-      var valores = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-      conteudo = valores.map(function(linha) {
-        return isInteracao ? linha.join(" | ") : linha[0];
-      }).join("\n");
+  var leuRam = false;
+  if (typeof __RUNTIME_RAM_DATA__ !== "undefined" && __RUNTIME_RAM_DATA__) {
+    try {
+      var rowsRam = isInteracao
+        ? (__RUNTIME_RAM_DATA__.getInteracoesRows ? __RUNTIME_RAM_DATA__.getInteracoesRows() : [])
+        : (__RUNTIME_RAM_DATA__.getRemumeRows ? __RUNTIME_RAM_DATA__.getRemumeRows() : []);
+      if (Array.isArray(rowsRam) && rowsRam.length > 0) {
+        var inicioIdx = isInteracao ? 1 : 0;
+        conteudo = rowsRam.slice(inicioIdx).map(function(linha) {
+          return isInteracao ? (Array.isArray(linha) ? linha.join(" | ") : String(linha)) : (Array.isArray(linha) ? linha[0] : String(linha));
+        }).join("\n");
+        leuRam = true;
+      }
+    } catch (_) {}
+  }
+  if (!leuRam) {
+    try {
+      var ss = SpreadsheetApp.openById(idPlanilha, isInteracao);
+      var sheet = ss.getSheets()[0];
+      var lastRow = sheet.getLastRow();
+      var lastCol = isInteracao ? sheet.getLastColumn() : 1;
+      if (lastRow > 1 && lastCol > 0) {
+        var valores = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+        conteudo = valores.map(function(linha) {
+          return isInteracao ? linha.join(" | ") : linha[0];
+        }).join("\n");
+      }
+    } catch (e) {
+      Logger.log("Erro ao acessar a base local " + cachePrefix);
+      throw new Error("Erro ao acessar a base de dados (" + cachePrefix + ").");
     }
-  } catch (e) {
-    Logger.log("Erro ao acessar a planilha " + cachePrefix);
-    throw new Error("Erro ao acessar a base de dados (" + cachePrefix + "). Verifique permissões do Drive.");
   }
   var fonte = identidadeFontePlanilha(idPlanilha, isInteracao);
   _cachePlanilhasExecucao[cachePrefix] = conteudo;
@@ -369,13 +386,24 @@ function filtrarMedicamentosRelevantes(baseCompleta, pedidoUsuario) {
 }
 
 function checarStatusFonteDrive(idPlanilha, isInteracao) {
+  if (typeof __RUNTIME_RAM_DATA__ !== "undefined" && __RUNTIME_RAM_DATA__) {
+    try {
+      var rowsRam = isInteracao
+        ? (__RUNTIME_RAM_DATA__.getInteracoesRows ? __RUNTIME_RAM_DATA__.getInteracoesRows() : [])
+        : (__RUNTIME_RAM_DATA__.getRemumeRows ? __RUNTIME_RAM_DATA__.getRemumeRows() : []);
+      if (Array.isArray(rowsRam) && rowsRam.length > 0) {
+        var totalReg = isInteracao ? Math.max(0, rowsRam.length - 1) : rowsRam.length;
+        return "Conectada ✅ (" + totalReg + " registros em RAM)";
+      }
+    } catch (_) {}
+  }
   try {
     var ss = SpreadsheetApp.openById(idPlanilha, isInteracao);
     var sheets = ss.getSheets();
-    if (!sheets || sheets.length === 0) return "❌ Sem abas na planilha";
+    if (!sheets || sheets.length === 0) return "❌ Base local indisponível";
     var sheet = sheets[0];
     var totalLinhas = sheet.getLastRow();
-    if (totalLinhas <= 1) return "⚠️ Conectada, mas sem linhas de dados (apenas cabeçalho)";
+    if (totalLinhas <= 1) return "⚠️ Conectada, mas sem linhas de dados";
     return "Conectada ✅ (" + (totalLinhas - 1) + " registros)";
   } catch (e) {
     return "❌ Erro ao acessar: " + e.message;
@@ -2249,9 +2277,20 @@ function _obterRegrasInteracoesNorm() {
   var termos = [];
   var vistosTermos = {};
   try {
-    var ss = (typeof SpreadsheetApp !== "undefined") ? SpreadsheetApp.openById("interacoes") : null;
-    if (ss) {
-      var linhas = ss.getSheets()[0].getRange(2, 1, 219, 6).getValues();
+    var linhas = null;
+    if (typeof __RUNTIME_RAM_DATA__ !== "undefined" && __RUNTIME_RAM_DATA__ && typeof __RUNTIME_RAM_DATA__.getInteracoesRows === "function") {
+      var rowsRamInt = __RUNTIME_RAM_DATA__.getInteracoesRows();
+      if (Array.isArray(rowsRamInt) && rowsRamInt.length > 1) {
+        linhas = rowsRamInt.slice(1, 220);
+      }
+    }
+    if (!linhas) {
+      var ss = (typeof SpreadsheetApp !== "undefined") ? SpreadsheetApp.openById("interacoes") : null;
+      if (ss) {
+        linhas = ss.getSheets()[0].getRange(2, 1, 219, 6).getValues();
+      }
+    }
+    if (linhas) {
       for (var k = 0; k < linhas.length; k++) {
         var r = linhas[k];
         var colANorm = String(r[1] || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();

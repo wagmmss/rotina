@@ -20,8 +20,7 @@ function obterCatalogoComandosSlash(chatId) {
         { cmd: "/menu", aliases: ["/menu"], sintaxe: "/menu", desc: "Central de Comandos e teclado rápido beira-leito." },
         { cmd: "/ajuda", aliases: ["/ajuda"], sintaxe: "/ajuda [filtro]", desc: "Manual resumido de comandos com busca por especialidade." },
         { cmd: "/novo", aliases: ["/novo"], sintaxe: "/novo", desc: "Limpa a memória do caso e reseta o contexto clínico." },
-        { cmd: "/status", aliases: ["/status"], sintaxe: "/status", desc: "Status operacional dos servidores, REMUME e APIs." },
-        { cmd: "/pc", aliases: ["/pc"], sintaxe: "/pc [sync|audit|status]", desc: "Envia ordens para o runner local do computador." }
+        { cmd: "/status", aliases: ["/status"], sintaxe: "/status", desc: "Status operacional dos servidores, REMUME e APIs." }
       ]
     },
     {
@@ -443,8 +442,8 @@ function enviarManualCompletoComandos(chatId, filtro, messageId) {
 
   // Bloqueio explícito de ajuda sobre rotina e agenda pessoal para convidados
   if (typeof ehUsuarioTitular === "function" && chatId && !ehUsuarioTitular(chatId)) {
-    if (filtroNorm === "rotina" || filtroNorm === "agenda" || filtroNorm === "habitos" || filtroNorm === "task" || filtroNorm === "tarefa" || filtroNorm === "tasks" || filtroNorm === "briefing" || filtroNorm === "checkin") {
-      var msgRestrita = "🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Notion, Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use a Central de Ajuda para explorar calculadoras, condutas e protocolos clínicos.";
+    if (filtroNorm === "rotina" || filtroNorm === "agenda" || filtroNorm === "habitos" || filtroNorm === "briefing" || filtroNorm === "checkin") {
+      var msgRestrita = "🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use a Central de Ajuda para explorar calculadoras, condutas e protocolos clínicos.";
       var kbRestrito = {
         inline_keyboard: [
           [{ text: "🔙 Central de Ajuda", callback_data: "ux:ajuda:menu" }, { text: "🏠 Início", callback_data: "ux:hub:inicio" }]
@@ -542,7 +541,7 @@ function enviarManualCompletoComandos(chatId, filtro, messageId) {
       "monkeypox": "mpox", "neuro": "ef", "pqu": "ef", "ortopo": "ef",
       "reumato": "ef", "orl": "ef", "exame": "ef", "exames": "ef", "semiologia": "ef",
       "sbar": "plantao", "pitch": "round", "sabatina": "voz",
-      "tarefa": "task", "relatorio": "semana",
+      "relatorio": "semana",
       "obstetricia": "go", "gineco": "go"
     };
     if (sinonimosBusca[cmdBusca]) {

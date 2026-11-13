@@ -34,6 +34,7 @@ const {
 const { handlerClinicalSoap } = require('./controllers/clinical_soap.controller');
 const { SoapInputSchema } = require('../src/clinical/schemas/soap.schema');
 const cnesRoutes = require('./controllers/cnes.controller');
+const telegramGateway = require('./telegram-gateway');
 
 function ehErroAutenticacaoOuSessao(err) {
   if (!err) return false;
@@ -117,7 +118,8 @@ const {
 } = require('./telemetry');
 const d1Inbox = createD1Inbox();
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const rawPort = parseInt(process.env.PORT || '3000', 10);
+const PORT = (rawPort === 8080 && process.env.NODE_ENV !== 'production') ? 3000 : (Number.isFinite(rawPort) ? rawPort : 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 
 // Handlers globais de resiliência e telemetria de processo
@@ -180,6 +182,11 @@ function obterConfiguracaoLogger() {
 
 function criarInstanciaFastify() {
   return require('fastify')({
+    ajv: {
+      customOptions: {
+        allowUnionTypes: true
+      }
+    },
     logger: obterConfiguracaoLogger(),
     requestIdHeader: 'x-request-id',
     genReqId: (req) => {
@@ -283,6 +290,7 @@ async function buildServer() {
           'https://cdn.jsdelivr.net',
           'https://telegram.org'
         ],
+        scriptSrcAttr: ["'unsafe-inline'"],
         styleSrc: [
           "'self'",
           "'unsafe-inline'",
@@ -294,7 +302,8 @@ async function buildServer() {
         connectSrc: ["'self'", 'https:', 'wss:', 'ws:'],
         mediaSrc: ["'self'", 'data:', 'blob:'],
         objectSrc: ["'none'"],
-        frameAncestors: ["'self'", 'https://web.telegram.org', 'https://*.telegram.org']
+        frameAncestors: ["'self'", 'https://web.telegram.org', 'https://*.telegram.org', 'https://aistudio.google.com', 'https://*.google.com', 'https://*.googleusercontent.com'],
+        upgradeInsecureRequests: null
       }
     },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -466,10 +475,9 @@ async function buildServer() {
           local: runtime.ctx.IaCircuitBreaker ? runtime.ctx.IaCircuitBreaker.obterStatus('LOCAL') : null,
           ollama: runtime.ctx.IaCircuitBreaker ? runtime.ctx.IaCircuitBreaker.obterStatus('OLLAMA') : null
         },
-        notion: {
-          token_configurado: !!cfg.get('NOTION_TOKEN'),
-          habit_log_db_configurado: !!cfg.get('NOTION_HABIT_LOG_DB_ID'),
-          tasks_db_configurado: !!cfg.get('NOTION_TASKS_DB_ID')
+        gateway: {
+          mode: 'per-chat-async',
+          queue_pending: webhookPerChatQueue.getTotalPending()
         },
         ia_local_disponivel: !!(runtime.ctx.IaLocalFallbackService && runtime.ctx.executarFallbackLocalOffline)
       };
@@ -1365,20 +1373,17 @@ async function buildServer() {
   // Fila de processamento com controle de concorrência: apenas 1 update
   // é processado por vez (serialização), evitando race conditions no
   // runtime síncrono que não tem LockService real.
-  const webhookQueue = [];
-  let webhookProcessing = false;
+  // Fila assíncrona isolada por chat_id:
+  // - Chats diferentes executam concorrentemente
+  // - O mesmo chat mantém ordem sequencial segura, com fastLane furando fila por chat
+  const webhookPerChatQueue = new telegramGateway.PerChatAsyncQueue();
 
-  async function processWebhookQueue() {
-    if (webhookProcessing || webhookQueue.length === 0) return;
-    webhookProcessing = true;
-
-    const item = webhookQueue.shift();
+  async function processWebhookItem(item) {
     const { fakeGasEvent, updateId, t0, kind } = item;
     const inicioProcessamento = performance.now();
     const ateInicioMs = inicioProcessamento - t0;
     const filaMs = inicioProcessamento - (item.enqueuedAt ?? t0);
     let reservadoRemoto = false;
-    let tentarNovamente = false;
     let estado = 'unknown';
     let job = null;
     const http = {};
@@ -1417,11 +1422,10 @@ async function buildServer() {
       if (d1Inbox && !reservadoRemoto) {
         item.retries = (item.retries || 0) + 1;
         if (item.retries <= 3) {
-          webhookQueue.unshift(item);
-          tentarNovamente = true;
-        } else {
-          fastify.log.error(`[Webhook Background] Update ${updateId} excedeu 3 tentativas de reserva D1; movendo para fim da fila.`);
-          webhookQueue.push(item);
+          setTimeout(() => {
+            const retried = webhookPerChatQueue.enqueue(item.chatKey || 'default', () => processWebhookItem(item), { fastLane: !!item.isFastLane });
+            if (retried && retried.promise) retried.promise.catch(() => {});
+          }, 5000);
         }
       } else if (d1Inbox) {
         try { await d1Inbox.markState(updateId, 'uncertain'); }
@@ -1429,14 +1433,11 @@ async function buildServer() {
       }
     } finally {
       fastify.log.info({ updateId, kind, estado, ateInicioMs: roundMs(ateInicioMs), filaMs: roundMs(filaMs), processamentoMs: roundMs(performance.now() - inicioProcessamento), ...tempos, http, etapasClinicas: clinicalStages(job) }, '[Webhook] Medicao de entrega');
-      
-      // Telemetria ao vivo da interação no Telegram
+
       let resumoInteracao = `Update #${updateId} (${kind})`;
       try {
         const up = JSON.parse(fakeGasEvent.postData.contents);
-        if (up.inline_query) {
-          resumoInteracao = `Inline Query: "${(up.inline_query.query || '').slice(0, 60)}"`;
-        } else if (up.callback_query) {
+        if (up.callback_query) {
           resumoInteracao = `Botão Telegram: ${up.callback_query.data || ''}`;
         } else if (up.message) {
           if (up.message.web_app_data) resumoInteracao = 'Mini App (WebApp Data)';
@@ -1455,14 +1456,6 @@ async function buildServer() {
         status: estado === 'error' ? 'erro' : 'sucesso',
         detalhes: { updateId, estado, etapasClinicas: clinicalStages(job) }
       });
-
-      webhookProcessing = false;
-      // Processa próximo item da fila no próximo tick, liberando o event loop
-      // para healthchecks e outras requisições entre processamentos
-      if (webhookQueue.length > 0) {
-        if (tentarNovamente) setTimeout(processWebhookQueue, 5000);
-        else setImmediate(processWebhookQueue);
-      }
     }
   }
 
@@ -1472,20 +1465,18 @@ async function buildServer() {
     const interrompidos = await d1Inbox.markInterrupted();
     if (interrompidos) fastify.log.warn({ interrompidos }, '[Webhook] Pedidos em execução exigem conferência após reinício');
     let afterId = -1;
-    let totalPendentes = 0;
     for (;;) {
       const pendentes = await d1Inbox.recoverPending(50, afterId);
       for (const update of pendentes) {
         const fakeGasEvent = { parameter: { secret: runtime.ctx.ConfigService.get('WEBHOOK_SECRET') }, postData: { contents: JSON.stringify(update) } };
         const now = performance.now();
-        webhookQueue.push({ fakeGasEvent, updateId: update.update_id, t0: now, enqueuedAt: now, kind: updateKind(update) });
+        const chatKey = String(update.message?.chat?.id || update.callback_query?.message?.chat?.id || update.callback_query?.from?.id || 'default');
+        const item = { fakeGasEvent, updateId: update.update_id, t0: now, enqueuedAt: now, kind: updateKind(update), chatKey };
+        const recovered = webhookPerChatQueue.enqueue(chatKey, () => processWebhookItem(item), { fastLane: false });
+        if (recovered && recovered.promise) recovered.promise.catch(() => {});
         afterId = update.update_id;
-        totalPendentes++;
       }
       if (pendentes.length < 50) break;
-    }
-    if (totalPendentes) {
-      setImmediate(processWebhookQueue);
     }
   });
 
@@ -1536,20 +1527,16 @@ async function buildServer() {
       const chatIdRemetente = (
         (updateData.message && updateData.message.chat && String(updateData.message.chat.id)) ||
         (updateData.callback_query && updateData.callback_query.message && updateData.callback_query.message.chat && String(updateData.callback_query.message.chat.id)) ||
-        (updateData.callback_query && updateData.callback_query.from && String(updateData.callback_query.from.id)) ||
-        (updateData.inline_query && updateData.inline_query.from && String(updateData.inline_query.from.id)) ||
-        (updateData.chosen_inline_result && updateData.chosen_inline_result.from && String(updateData.chosen_inline_result.from.id))
+        (updateData.callback_query && updateData.callback_query.from && String(updateData.callback_query.from.id))
       );
 
       if (!chatIdRemetente || !chatsPermitidos.includes(chatIdRemetente)) {
-        // O Telegram repete respostas fora de 2xx; updates de outros chats
-        // são ignorados definitivamente para não bloquear a fila legítima.
         return { ok: true, ignored: true };
       }
 
       // Proteção de contrapressão: evita saturação de memória se houver flood de updates
-      if (webhookQueue.length >= 50) {
-        fastify.log.warn(`[Webhook Telegram] Fila cheia (${webhookQueue.length} itens). Rejeitando update ${updateId}.`);
+      if (webhookPerChatQueue.getTotalPending() >= 50) {
+        fastify.log.warn(`[Webhook Telegram] Fila cheia (${webhookPerChatQueue.getTotalPending()} itens). Rejeitando update ${updateId}.`);
         reply.status(429);
         return { ok: false, erro: 'Fila cheia' };
       }
@@ -1569,9 +1556,12 @@ async function buildServer() {
       try {
         if (d1Inbox) novo = await d1Inbox.accept(updateData);
         else {
-          // Sem D1, o checkpoint local precisa ser persistido antes do ACK.
           novo = runtime.ctx.enfileirarUpdate(updateData);
-          runtime.persistirPropriedades(true);
+          if (process.env.NODE_ENV === 'test') {
+            runtime.persistirPropriedades(true);
+          } else {
+            await runtime.persistirPropriedadesAsync();
+          }
         }
         checkpointOk = true;
       } finally {
@@ -1580,41 +1570,43 @@ async function buildServer() {
       }
       if (!novo) return { ok: true, duplicate: true };
 
-      // Fast-Ack de Digitação: feedback visual imediato (< 50ms) no Telegram antes do enfileiramento pesado
+      // Fast-Ack assíncrono (<20ms): destrava spinner de callback e dispara chatAction sem aguardar o processamento completo
       const ehTeste = process.env.NODE_ENV === 'test' || (runtime.ctx && runtime.ctx.ConfigService && runtime.ctx.ConfigService.get('NODE_ENV') === 'test');
       const tokenBot = runtime.ctx?.ConfigService?.get('TELEGRAM_BOT_TOKEN');
       const chatAlvoId = updateData.message?.chat?.id || updateData.callback_query?.message?.chat?.id;
-      if (!ehTeste && tokenBot && chatAlvoId) {
-        const acao = (updateData.message?.voice || updateData.message?.audio) ? 'record_voice' : 'typing';
-        fetch(`https://api.telegram.org/bot${tokenBot}/sendChatAction`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatAlvoId, action: acao })
-        }).catch(() => {});
+      if (!ehTeste && tokenBot) {
+        if (updateData.callback_query?.id) {
+          telegramGateway.answerCallbackQueryFast(tokenBot, updateData.callback_query.id, '').catch(() => {});
+        }
+        if (chatAlvoId && updateData.message) {
+          const acao = (updateData.message?.voice || updateData.message?.audio) ? 'record_voice' : 'typing';
+          telegramGateway.sendChatActionFast(tokenBot, chatAlvoId, acao).catch(() => {});
+        }
       }
 
-      // Enfileira para processamento em background com Fast-Lane ampliado para navegação e comandos rápidos
       const ehNavegacaoEstatica = !!(runtime.ctx && typeof runtime.ctx.destinoNavegacaoRapida === 'function' && runtime.ctx.destinoNavegacaoRapida(updateData));
       const ehBotaoCallback = !!updateData.callback_query;
       const textoMsg = updateData.message && typeof updateData.message.text === 'string' ? updateData.message.text.trim().toLowerCase() : '';
-      const ehComandoRapido = textoMsg && /^\/(?:menu|start|ajuda|cancelar|novo|leito|rotina|agenda|cockpit|pcr|dva|gaso|crcl|clcr|clearance|ctg|dengue|curb|pancreatite|sca|colestase|swansea)(?:\s|$)/i.test(textoMsg);
+      const ehComandoRapido = textoMsg && /^\/(?:menu|hub|start|ajuda|cancelar|novo|leito|rotina|agenda|cockpit|pcr|dva|gaso|crcl|clcr|clearance|ctg|dengue|curb|pancreatite|sca|colestase|swansea)(?:\s|$)/i.test(textoMsg);
       const isFastLane = ehNavegacaoEstatica || ehBotaoCallback || ehComandoRapido;
 
-      const queueItem = { fakeGasEvent, updateId, t0, enqueuedAt: performance.now(), kind: updateKind(updateData), isFastLane };
-      if (isFastLane) {
-        let insertIdx = 0;
-        while (insertIdx < webhookQueue.length && webhookQueue[insertIdx].isFastLane) {
-          insertIdx++;
+      const chatKey = String(chatAlvoId || chatIdRemetente || 'default');
+      const queueItem = { fakeGasEvent, updateId, t0, enqueuedAt: performance.now(), kind: updateKind(updateData), isFastLane, chatKey };
+      setImmediate(() => {
+        const queued = webhookPerChatQueue.enqueue(chatKey, () => processWebhookItem(queueItem), { fastLane: isFastLane });
+        if (!queued || !queued.accepted) {
+          fastify.log.warn(`[Webhook Fila Rejeitada] Update ${updateId}: ${queued ? queued.reason : 'erro'}`);
+          return;
         }
-        webhookQueue.splice(insertIdx, 0, queueItem);
-      } else {
-        webhookQueue.push(queueItem);
-      }
-      const elapsed = (performance.now() - t0).toFixed(2);
-      fastify.log.info(`[Webhook Telegram] Update ${updateId}${isFastLane ? ' (fast-lane)' : ''} enfileirado em ${elapsed}ms. Fila: ${webhookQueue.length} item(ns).`);
+        if (queued.promise) {
+          queued.promise.catch((err) => {
+            fastify.log.error(`[Webhook Fila Erro] Update ${updateId}: ${err.message}`);
+          });
+        }
+      });
 
-      // Dispara processamento da fila fora do ciclo de resposta HTTP
-      setImmediate(processWebhookQueue);
+      const elapsed = (performance.now() - t0).toFixed(2);
+      fastify.log.info(`[Webhook Telegram] Update ${updateId}${isFastLane ? ' (fast-lane)' : ''} enfileirado em ${elapsed}ms. Fila: ${webhookPerChatQueue.getTotalPending()} item(ns).`);
 
       return { ok: true, tempo_ms: Number(elapsed) };
     } catch (err) {
@@ -1691,6 +1683,50 @@ async function buildServer() {
     return html;
   });
 
+  const pathRotinaTimeline = require('path').join(__dirname, '..', 'rotina_timeline.js');
+  let cacheRotinaTimeline = null;
+  let etagRotinaTimeline = null;
+  fastify.get('/rotina_timeline.js', async (request, reply) => {
+    reply.type('application/javascript; charset=utf-8');
+    if (!cacheRotinaTimeline && require('fs').existsSync(pathRotinaTimeline)) {
+      cacheRotinaTimeline = require('fs').readFileSync(pathRotinaTimeline, 'utf8');
+      etagRotinaTimeline = gerarETag(cacheRotinaTimeline);
+    }
+    if (!cacheRotinaTimeline) {
+      return reply.status(404).send('// rotina_timeline.js not found');
+    }
+    const etag = etagRotinaTimeline || gerarETag('rotina_timeline');
+    reply.header('ETag', etag);
+    reply.header('Cache-Control', 'no-cache');
+    if (etagCorresponde(request.headers['if-none-match'], etag)) {
+      reply.status(304).send();
+      return;
+    }
+    return cacheRotinaTimeline;
+  });
+
+  const pathEstacaoSoap = require('path').join(__dirname, '..', 'estacao_soap.js');
+  let cacheEstacaoSoap = null;
+  let etagEstacaoSoap = null;
+  fastify.get('/estacao_soap.js', async (request, reply) => {
+    reply.type('application/javascript; charset=utf-8');
+    if (!cacheEstacaoSoap && require('fs').existsSync(pathEstacaoSoap)) {
+      cacheEstacaoSoap = require('fs').readFileSync(pathEstacaoSoap, 'utf8');
+      etagEstacaoSoap = gerarETag(cacheEstacaoSoap);
+    }
+    if (!cacheEstacaoSoap) {
+      return reply.status(404).send('// estacao_soap.js not found');
+    }
+    const etag = etagEstacaoSoap || gerarETag('estacao_soap');
+    reply.header('ETag', etag);
+    reply.header('Cache-Control', 'no-cache');
+    if (etagCorresponde(request.headers['if-none-match'], etag)) {
+      reply.status(304).send();
+      return;
+    }
+    return cacheEstacaoSoap;
+  });
+
   const pathManifest = require('path').join(__dirname, '..', 'manifest.json');
   let cacheManifest = null;
   let etagManifest = null;
@@ -1707,7 +1743,7 @@ async function buildServer() {
       reply.status(304).send();
       return;
     }
-    return cacheManifest;
+    return cacheManifest || JSON.stringify({ name: 'Ultra Rotina', short_name: 'Cockpit', display: 'standalone', start_url: './' });
   });
 
   const pathSw = require('path').join(__dirname, '..', 'sw.js');
@@ -1726,8 +1762,13 @@ async function buildServer() {
       reply.status(304).send();
       return;
     }
-    return cacheSw;
+    return cacheSw || 'self.addEventListener("install", () => self.skipWaiting());';
   });
+
+  const FALLBACK_PNG_1X1 = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    'base64'
+  );
 
   const pathPwa192 = require('path').join(__dirname, '..', 'pwa-192x192.png');
   let cachePwa192 = null;
@@ -1745,7 +1786,7 @@ async function buildServer() {
       reply.status(304).send();
       return;
     }
-    return cachePwa192;
+    return cachePwa192 || FALLBACK_PNG_1X1;
   });
 
   const pathPwa512 = require('path').join(__dirname, '..', 'pwa-512x512.png');
@@ -1764,7 +1805,7 @@ async function buildServer() {
       reply.status(304).send();
       return;
     }
-    return cachePwa512;
+    return cachePwa512 || FALLBACK_PNG_1X1;
   });
 
   const pathAppleIcon = require('path').join(__dirname, '..', 'apple-touch-icon.png');
@@ -1783,138 +1824,12 @@ async function buildServer() {
       reply.status(304).send();
       return;
     }
-    return cacheAppleIcon;
+    return cacheAppleIcon || FALLBACK_PNG_1X1;
   }
   fastify.get('/apple-touch-icon.png', async (request, reply) => responderAppleIcon(request, reply));
   fastify.get('/favicon.ico', async (request, reply) => responderAppleIcon(request, reply));
 
-  // ══════════════════════════════════════════════════════════════════════════════
-  // SNIPER DE PLANTÕES MÉDICOS (WHATSAPP ➔ BOT ROTINA · ISOLAMENTO ZERO-TRUST)
-  // ══════════════════════════════════════════════════════════════════════════════
-  const whatsappBridge = require('./whatsapp-bridge.js');
-  const waManager = whatsappBridge.instanciarOuObterManager({
-    onMensagemRecebida: async (envelope) => {
-      const svc = runtime.ctx?.PlantaoSniperService;
-      if (!svc || typeof svc.processarMensagemGrupoWhatsApp !== 'function') return;
-      const allowlist = typeof svc.obterGruposAllowlist === 'function' ? svc.obterGruposAllowlist() : [];
-      const check = whatsappBridge.filtrarPacoteWhatsAppZeroTrust(envelope, allowlist);
-      if (!check.permitido) return;
-      return svc.processarMensagemGrupoWhatsApp(envelope.texto, envelope.grupoNome, envelope.remetenteNumero, {
-        remoteJid: envelope.remoteJid,
-        fromMe: envelope.fromMe,
-        escalistaNome: envelope.pushName,
-        chatId: runtime.ctx?.ConfigService?.get('TELEGRAM_CHAT_ID') || process.env.TELEGRAM_CHAT_ID || ''
-      });
-    }
-  });
-
-  fastify.get('/api/sniper/status', async (request, reply) => {
-    const svc = runtime.ctx?.PlantaoSniperService;
-    if (!svc) {
-      return reply.status(503).send({ ok: false, error: 'PlantaoSniperService indisponível.' });
-    }
-    return {
-      ok: true,
-      config: svc.obterConfig(),
-      metricas: svc.obterMetricas(),
-      gruposAllowlist: typeof svc.obterGruposAllowlist === 'function' ? svc.obterGruposAllowlist() : [],
-      historicoRecente: svc.obterHistorico().slice(0, 10),
-      whatsapp: waManager.obterStatusConexao()
-    };
-  });
-
-  fastify.post('/api/sniper/pair', async (request, reply) => {
-    const svc = runtime.ctx?.PlantaoSniperService;
-    const body = request.body || {};
-    const telefone = body.telefone || body.phone || body.numero;
-    if (!telefone) {
-      return reply.status(400).send({ ok: false, error: 'Campo "telefone" obrigatório (ex: 5511999998888).' });
-    }
-    try {
-      const resPair = await waManager.solicitarCodigoPareamentoReal(telefone);
-      if (svc && typeof svc.salvarConfigSniper === 'function') {
-        svc.salvarConfigSniper({ telefoneWhatsApp: resPair.telefone });
-      }
-      return { ok: true, ...resPair };
-    } catch (err) {
-      return reply.status(500).send({ ok: false, error: err.message });
-    }
-  });
-
-  fastify.post('/api/sniper/grupos/sync', async (request, reply) => {
-    const svc = runtime.ctx?.PlantaoSniperService;
-    if (!svc || typeof svc.sincronizarGruposWhatsApp !== 'function') {
-      return reply.status(503).send({ ok: false, error: 'PlantaoSniperService indisponível.' });
-    }
-    let grupos = Array.isArray(request.body?.grupos) ? request.body.grupos : [];
-    // Se nenhum grupo foi passado no body, tenta consultar grupos reais da sessão conectada
-    if (grupos.length === 0 && request.body?.consultarWhatsAppReal !== false) {
-      try {
-        const buscaReal = await waManager.buscarGruposReaisWhatsApp();
-        if (buscaReal.ok && Array.isArray(buscaReal.grupos) && buscaReal.grupos.length > 0) {
-          grupos = buscaReal.grupos;
-        }
-      } catch (e) {}
-    }
-    const res = svc.sincronizarGruposWhatsApp(grupos);
-    return { ok: true, gruposSincronizadosQtd: grupos.length, ...res };
-  });
-
-  fastify.post('/api/sniper/webhook', async (request, reply) => {
-    const svc = runtime.ctx?.PlantaoSniperService;
-    if (!svc || typeof svc.processarMensagemGrupoWhatsApp !== 'function') {
-      return reply.status(503).send({ ok: false, error: 'PlantaoSniperService indisponível.' });
-    }
-    const body = request.body || {};
-
-    // Extração normalizada universal de qualquer formato de evento WhatsApp
-    const envelope = whatsappBridge.extrairEnvelopeMensagem(body);
-
-    // CAMADA 1 NA BORDA HTTP: Descarte instantâneo de conversas privadas, status ou mensagens próprias
-    if (envelope.fromMe) {
-      return { ok: true, ignored: true, camada: 1, codigo: 'MENSAGEM_PROPRIA_IGNORADA' };
-    }
-    if (envelope.remoteJid && (!envelope.remoteJid.endsWith('@g.us') || envelope.remoteJid.includes('@s.whatsapp.net') || envelope.remoteJid.includes('broadcast') || envelope.remoteJid.includes('@newsletter'))) {
-      return { ok: true, ignored: true, camada: 1, codigo: 'CHAT_PRIVADO_OU_STATUS_BLOQUEADO' };
-    }
-
-    if (!envelope.texto) {
-      return reply.status(400).send({ ok: false, error: 'Campo de texto da mensagem não identificado no payload WhatsApp.' });
-    }
-
-    const allowlist = typeof svc.obterGruposAllowlist === 'function' ? svc.obterGruposAllowlist() : [];
-    const checkBorda = whatsappBridge.filtrarPacoteWhatsAppZeroTrust(envelope, allowlist);
-    if (!checkBorda.permitido && envelope.remoteJid) {
-      return { ok: true, ignored: true, camada: checkBorda.camada, codigo: checkBorda.codigo, motivo: checkBorda.motivo };
-    }
-
-    const opcoes = {
-      fromMe: envelope.fromMe,
-      remoteJid: envelope.remoteJid,
-      exigirAllowlist: Boolean(envelope.remoteJid),
-      grupoNome: envelope.grupoNome || 'Grupo WhatsApp Plantões',
-      escalistaNome: envelope.pushName || 'Escalista',
-      escalistaFone: envelope.remetenteNumero || '',
-      chatId: body.chatId || runtime.ctx?.ConfigService?.get('TELEGRAM_CHAT_ID') || process.env.TELEGRAM_CHAT_ID || ''
-    };
-
-    const resultado = svc.processarMensagemGrupoWhatsApp(envelope.texto, opcoes.grupoNome, opcoes.escalistaFone, opcoes);
-
-    // Se a vaga foi capturada no modo auto e possui plano stealth, executa disparo seguro
-    if (resultado && resultado.status === 'CAPTURADA_SNIPER_AUTO' && resultado.stealth) {
-      try {
-        const resDisparo = await waManager.executarDisparoStealthReal(resultado.stealth, { aplicarDelayReal: false });
-        resultado.disparoWhatsApp = resDisparo;
-      } catch (errDisparo) {
-        resultado.disparoWhatsAppErro = errDisparo.message;
-      }
-    }
-
-    return {
-      ok: true,
-      ...resultado
-    };
-  });
+  // WhatsApp Sniper desacoplado e removido conforme simplificação arquitetural.
 
   // ══════════════════════════════════════════════════════════════════════════════
   // PRECEPTOR IA · VOZ EM TEMPO REAL (GEMINI-3.8-LIVE / WEBSOCKET FULL-DUPLEX)
@@ -2065,9 +1980,7 @@ async function buildServer() {
 
     const MODELOS_LIVE_CANDIDATOS = [
       process.env.GEMINI_LIVE_MODEL,
-      'gemini-3.8-live',
-      'gemini-2.0-flash-live-001',
-      'gemini-2.0-flash-exp'
+      'gemini-3.8-live'
     ].filter(Boolean);
 
     const ctxVozServer = (runtime.ctx && runtime.ctx.ConfigService && typeof runtime.ctx.ConfigService.getContextoClinico === 'function')

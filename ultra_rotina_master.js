@@ -3,8 +3,8 @@
  * ULTRA ROTINA · MASTER ENGINE BUNDLE (NODE.JS / RENDER RUNTIME)
  * ==============================================================================
  * Servidor oficial Node.js/Docker no Render.
- * Gerado automaticamente via build_master.py em: 2026-11-12 17:06:02
- * Checksum SHA256: df54037d47596f6a
+ * Gerado automaticamente via build_master.py em: 2026-11-13 01:29:02
+ * Checksum SHA256: 68ca306c15894b2b
  * ==============================================================================
  */
 
@@ -1570,9 +1570,6 @@ var ConfigService = (function() {
 // Variáveis globais de compatibilidade
 var TELEGRAM_BOT_TOKEN = ConfigService.get("TELEGRAM_BOT_TOKEN");
 var TELEGRAM_CHAT_ID = ConfigService.get("TELEGRAM_CHAT_ID");
-var NOTION_TOKEN = ConfigService.get("NOTION_TOKEN");
-var NOTION_HABIT_LOG_DB_ID = ConfigService.get("NOTION_HABIT_LOG_DB_ID");
-var NOTION_TASKS_DB_ID = ConfigService.get("NOTION_TASKS_DB_ID");
 var PROVEDOR_TEXTO_PADRAO = ConfigService.get("PROVEDOR_TEXTO_PADRAO", "GEMINI");
 var GROQ_API_KEY = ConfigService.get("GROQ_API_KEY");
 var OPENROUTER_API_KEY = ConfigService.get("OPENROUTER_API_KEY");
@@ -1582,11 +1579,8 @@ var LOCAL_LLM_URL = ConfigService.get("LOCAL_LLM_URL", "http://127.0.0.1:11434/v
 var LOCAL_LLM_API_KEY = ConfigService.get("LOCAL_LLM_API_KEY", "ollama");
 var IA_MODELOS_LOCAL = ConfigService.getArray("IA_MODELOS_LOCAL");
 var TIMEZONE = ConfigService.get("TIMEZONE", "America/Sao_Paulo");
-var SPREADSHEET_ID_REMUME = ConfigService.get("SPREADSHEET_ID_REMUME");
-var SPREADSHEET_ID_INTERACOES = ConfigService.get("SPREADSHEET_ID_INTERACOES");
 var WEB_APP_URL = ConfigService.get("WEB_APP_URL");
 var IA_LOCAL_ENDPOINT = ConfigService.get("IA_LOCAL_ENDPOINT");
-var IA_MODELOS_LOCAL = ConfigService.get("IA_MODELOS_LOCAL");
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = ConfigService;
@@ -43103,20 +43097,37 @@ function obterPlanilha(cachePrefix, idPlanilha, isInteracao, forcarAtualizacao) 
     if (salvo !== null) return salvo;
   }
   var conteudo = "";
-  try {
-    var ss = SpreadsheetApp.openById(idPlanilha, isInteracao);
-    var sheet = ss.getSheets()[0];
-    var lastRow = sheet.getLastRow();
-    var lastCol = isInteracao ? sheet.getLastColumn() : 1;
-    if (lastRow > 1 && lastCol > 0) {
-      var valores = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-      conteudo = valores.map(function(linha) {
-        return isInteracao ? linha.join(" | ") : linha[0];
-      }).join("\n");
+  var leuRam = false;
+  if (typeof __RUNTIME_RAM_DATA__ !== "undefined" && __RUNTIME_RAM_DATA__) {
+    try {
+      var rowsRam = isInteracao
+        ? (__RUNTIME_RAM_DATA__.getInteracoesRows ? __RUNTIME_RAM_DATA__.getInteracoesRows() : [])
+        : (__RUNTIME_RAM_DATA__.getRemumeRows ? __RUNTIME_RAM_DATA__.getRemumeRows() : []);
+      if (Array.isArray(rowsRam) && rowsRam.length > 0) {
+        var inicioIdx = isInteracao ? 1 : 0;
+        conteudo = rowsRam.slice(inicioIdx).map(function(linha) {
+          return isInteracao ? (Array.isArray(linha) ? linha.join(" | ") : String(linha)) : (Array.isArray(linha) ? linha[0] : String(linha));
+        }).join("\n");
+        leuRam = true;
+      }
+    } catch (_) {}
+  }
+  if (!leuRam) {
+    try {
+      var ss = SpreadsheetApp.openById(idPlanilha, isInteracao);
+      var sheet = ss.getSheets()[0];
+      var lastRow = sheet.getLastRow();
+      var lastCol = isInteracao ? sheet.getLastColumn() : 1;
+      if (lastRow > 1 && lastCol > 0) {
+        var valores = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+        conteudo = valores.map(function(linha) {
+          return isInteracao ? linha.join(" | ") : linha[0];
+        }).join("\n");
+      }
+    } catch (e) {
+      Logger.log("Erro ao acessar a base local " + cachePrefix);
+      throw new Error("Erro ao acessar a base de dados (" + cachePrefix + ").");
     }
-  } catch (e) {
-    Logger.log("Erro ao acessar a planilha " + cachePrefix);
-    throw new Error("Erro ao acessar a base de dados (" + cachePrefix + "). Verifique permissões do Drive.");
   }
   var fonte = identidadeFontePlanilha(idPlanilha, isInteracao);
   _cachePlanilhasExecucao[cachePrefix] = conteudo;
@@ -43208,13 +43219,24 @@ function filtrarMedicamentosRelevantes(baseCompleta, pedidoUsuario) {
 }
 
 function checarStatusFonteDrive(idPlanilha, isInteracao) {
+  if (typeof __RUNTIME_RAM_DATA__ !== "undefined" && __RUNTIME_RAM_DATA__) {
+    try {
+      var rowsRam = isInteracao
+        ? (__RUNTIME_RAM_DATA__.getInteracoesRows ? __RUNTIME_RAM_DATA__.getInteracoesRows() : [])
+        : (__RUNTIME_RAM_DATA__.getRemumeRows ? __RUNTIME_RAM_DATA__.getRemumeRows() : []);
+      if (Array.isArray(rowsRam) && rowsRam.length > 0) {
+        var totalReg = isInteracao ? Math.max(0, rowsRam.length - 1) : rowsRam.length;
+        return "Conectada ✅ (" + totalReg + " registros em RAM)";
+      }
+    } catch (_) {}
+  }
   try {
     var ss = SpreadsheetApp.openById(idPlanilha, isInteracao);
     var sheets = ss.getSheets();
-    if (!sheets || sheets.length === 0) return "❌ Sem abas na planilha";
+    if (!sheets || sheets.length === 0) return "❌ Base local indisponível";
     var sheet = sheets[0];
     var totalLinhas = sheet.getLastRow();
-    if (totalLinhas <= 1) return "⚠️ Conectada, mas sem linhas de dados (apenas cabeçalho)";
+    if (totalLinhas <= 1) return "⚠️ Conectada, mas sem linhas de dados";
     return "Conectada ✅ (" + (totalLinhas - 1) + " registros)";
   } catch (e) {
     return "❌ Erro ao acessar: " + e.message;
@@ -45088,9 +45110,20 @@ function _obterRegrasInteracoesNorm() {
   var termos = [];
   var vistosTermos = {};
   try {
-    var ss = (typeof SpreadsheetApp !== "undefined") ? SpreadsheetApp.openById("interacoes") : null;
-    if (ss) {
-      var linhas = ss.getSheets()[0].getRange(2, 1, 219, 6).getValues();
+    var linhas = null;
+    if (typeof __RUNTIME_RAM_DATA__ !== "undefined" && __RUNTIME_RAM_DATA__ && typeof __RUNTIME_RAM_DATA__.getInteracoesRows === "function") {
+      var rowsRamInt = __RUNTIME_RAM_DATA__.getInteracoesRows();
+      if (Array.isArray(rowsRamInt) && rowsRamInt.length > 1) {
+        linhas = rowsRamInt.slice(1, 220);
+      }
+    }
+    if (!linhas) {
+      var ss = (typeof SpreadsheetApp !== "undefined") ? SpreadsheetApp.openById("interacoes") : null;
+      if (ss) {
+        linhas = ss.getSheets()[0].getRange(2, 1, 219, 6).getValues();
+      }
+    }
+    if (linhas) {
       for (var k = 0; k < linhas.length; k++) {
         var r = linhas[k];
         var colANorm = String(r[1] || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -46557,10 +46590,8 @@ var IaLocalFallbackService = (function () {
       intencao = 'ENFERMARIA';
     } else if (t.indexOf('plantao') !== -1 || t.indexOf('agenda') !== -1 || t.indexOf('consulta') !== -1 || t.indexOf('marcar') !== -1) {
       intencao = 'CALENDAR_CRIAR';
-    } else if (t.indexOf('tarefa') !== -1 || t.indexOf('notion') !== -1 || t.indexOf('lembrete') !== -1) {
-      intencao = 'NOTION_TASK';
     } else if (t.indexOf('duvida') !== -1 || t.indexOf('estudo') !== -1 || t.indexOf('medquest') !== -1) {
-      intencao = 'NOTION_DUVIDA';
+      intencao = 'ESTUDO_DUVIDA';
     }
 
     var ehSoap = s.indexOf('soap') !== -1 || s.indexOf('subjetivo') !== -1 || t.indexOf('soap') !== -1;
@@ -47389,7 +47420,7 @@ var IA_PADROES = {
 
 var IA_INTENCOES_VALIDAS = [
   "PRECEPTOR_VOZ", "EVIDENCIA_MEDICA", "CLINICO_EMERGENCIA", "CLINICO_SOAP", "CLINICO_RX",
-  "CLINICO_GASO", "CALENDAR_CRIAR", "CALENDAR_CONSULTAR", "NOTION_TASK", "NOTION_DUVIDA",
+  "CLINICO_GASO", "CALENDAR_CRIAR", "CALENDAR_CONSULTAR", "ESTUDO_DUVIDA",
   "HABITO_PROATIVO", "ENFERMARIA", "CONVERSA"
 ];
 
@@ -48002,7 +48033,7 @@ function chamarVertexAIGemini(parts, systemPrompt, opcoes) {
 
   var projectId = auth.projectId || VertexAuthService.getProjectId();
   var primaryLoc = opcoes.location || ConfigService.get("VERTEX_LOCATION", VertexAuthService.getLocation() || "global");
-  var primaryModel = opcoes.model || ConfigService.get("VERTEX_MODEL", VertexAuthService.getModel() || "gemini-2.5-flash");
+  var primaryModel = opcoes.model || ConfigService.get("VERTEX_MODEL", VertexAuthService.getModel() || "gemini-4-hydrogen");
 
   // Lista de tentativas na Vertex AI (Prioridade 1: gemini-4-argon em global)
   var rotasVertex = [
@@ -50782,8 +50813,8 @@ function classificarIntencaoMensagem(textoMensagem) {
   if (/\b(?:gaso|gasometria)\b/i.test(t) || (t.indexOf("ph") !== -1 && (t.indexOf("pco2") !== -1 || t.indexOf("hco3") !== -1 || t.indexOf("bicarb") !== -1 || /\bbic\b/.test(tn)))) {
     return { intencao: "CLINICO_GASO", confianca: 0.95 };
   }
-  if ((t.indexOf("dúvida") !== -1 || t.indexOf("duvida") !== -1) && (t.indexOf("medquest") !== -1 || t.indexOf("notion") !== -1 || t.indexOf("card") !== -1 || t.indexOf("flashcard") !== -1)) {
-    return { intencao: "NOTION_DUVIDA", confianca: 0.85 };
+  if ((t.indexOf("dúvida") !== -1 || t.indexOf("duvida") !== -1) && (t.indexOf("medquest") !== -1 || t.indexOf("estudo") !== -1 || t.indexOf("card") !== -1 || t.indexOf("flashcard") !== -1)) {
+    return { intencao: "ESTUDO_DUVIDA", confianca: 0.85 };
   }
   if (/(?:evid[êe]ncia|pubmed|artigos?\s+(?:sobre|de)|estudos?\s+(?:sobre|de)|meta-an[áa]lise|ensaios?\s+cl[íi]nicos?)/i.test(t)) {
     return { intencao: "EVIDENCIA_MEDICA", confianca: 0.95 };
@@ -51120,30 +51151,6 @@ function gerarCriticaSocraticaPreceptor(casoOuLeitoTexto) {
   return ctxCrit.saudacao + ", qual o principal risco de descompensação aguda desse paciente nas próximas duas horas e qual a sua conduta imediata?";
 }
 
-/**
- * Geração de Áudio Direta em Modo Rápido (Single-Pass Voice Generation)
- * Emite a fala do Preceptor Socrático diretamente em áudio (WAV) em uma única requisição ao Gemini 2.0 Flash.
- * Corta pela metade a latência de geração, eliminando a chamada intermediária de geração de texto.
- */
-function gerarAudioPreceptorDireto(casoOuDuvida, opcoes) {
-  opcoes = opcoes || {};
-  var textoPronto = opcoes.textoPronto ? String(opcoes.textoPronto).trim() : "";
-  var textoCaso = String(casoOuDuvida || "").trim();
-  if (!textoCaso && !textoPronto) return null;
-
-  var textoProvocacao = textoPronto ? _iaTextoFalado(textoPronto) : gerarProvocacaoPreceptorAudio(textoCaso);
-  if (!textoProvocacao) return null;
-
-  var blobAudio = sintetizarVozPreceptor(textoProvocacao);
-  if (!blobAudio) return null;
-
-  return {
-    audioBlob: blobAudio,
-    texto: textoProvocacao,
-    direto: true
-  };
-}
-
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     chamarMotorIaComFallback: chamarMotorIaComFallback,
@@ -51172,7 +51179,6 @@ if (typeof module !== "undefined" && module.exports) {
     gerarDialogoPreceptorSocratico: gerarDialogoPreceptorSocratico,
     extrairDadosEventoCalendario: extrairDadosEventoCalendario,
     gerarCriticaSocraticaPreceptor: gerarCriticaSocraticaPreceptor,
-    gerarAudioPreceptorDireto: gerarAudioPreceptorDireto,
     gerarGuiaExameFisicoEspecial: gerarGuiaExameFisicoEspecial,
     processarAudioClinicoMultimodal: processarAudioClinicoMultimodal,
     analisarImagemMedicaComIA: analisarImagemMedicaComIA,
@@ -51187,444 +51193,6 @@ if (typeof module !== "undefined" && module.exports) {
     _iaDesbloquear: _iaDesbloquear,
     IaCircuitBreaker: (typeof IaCircuitBreaker !== 'undefined' ? IaCircuitBreaker : null)
   };
-}
-
-
-// ==============================================================================
-// ARQUIVO FONTE: 05_notion.js
-// ==============================================================================
-
-/**
- * ==============================================================================
- * MÓDULO 05: INTEGRAÇÃO NOTION (Habit Log & Tasks DB com Blocos Ricos)
- * ==============================================================================
- */
-
-function normalizarNotionId(idOuUrl) {
-  if (!idOuUrl) return "";
-  var str = String(idOuUrl).trim();
-  var match = str.match(/([a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
-  if (match) return match[1];
-  return str.split("?")[0].replace(/^.*[\/]/, "").trim();
-}
-
-function chamarNotionAPI(url, metodo, dados) {
-  var token = ConfigService.get("NOTION_TOKEN");
-  if (!token) {
-    Logger.log("Aviso: NOTION_TOKEN não configurado.");
-    return null;
-  }
-
-  var options = {
-    "method": metodo.toLowerCase(),
-    "headers": {
-      "Authorization": "Bearer " + token,
-      "Notion-Version": "2022-06-28",
-      "Content-Type": "application/json"
-    },
-    "muteHttpExceptions": true
-  };
-  if (dados) {
-    options.payload = JSON.stringify(dados);
-  }
-
-  for (var tentativa = 0; tentativa < 2; tentativa++) {
-    try {
-      var res = UrlFetchApp.fetch(url, options);
-      var code = res.getResponseCode();
-      if (code < 300) {
-        return JSON.parse(res.getContentText());
-      }
-      if (code === 429) {
-        Utilities.sleep(1500);
-      } else {
-        var textoErro = "";
-        try { textoErro = res.getContentText(); } catch (_) {}
-        Logger.log("Notion erro HTTP " + code + (textoErro ? ": " + textoErro.slice(0, 300) : ""));
-        return null;
-      }
-    } catch (e) {
-      Logger.log("Falha de comunicação com o Notion: " + (e ? e.message : "resultado incerto"));
-      return null;
-    }
-  }
-  return null;
-}
-
-function obterOuCriarPaginaHabitLog(dataISO) {
-  var dbId = normalizarNotionId(ConfigService.get("NOTION_HABIT_LOG_DB_ID"));
-  if (!dbId) {
-    Logger.log("Aviso: NOTION_HABIT_LOG_DB_ID não configurado.");
-    return null;
-  }
-
-  var res = chamarNotionAPI("https://api.notion.com/v1/databases/" + dbId + "/query", "POST", {
-    "filter": { "property": "Date", "date": { "equals": dataISO } }
-  });
-
-  if (!res || !res.results) {
-    Logger.log("Erro ao consultar página do Habit Log no Notion.");
-    return null;
-  }
-
-  if (res.results.length > 0) {
-    return res.results[0].id;
-  }
-
-  var diaNome = obterDiaSemanaExtenso(new Date());
-  var ptitulo = diaNome + " (" + dataISO.slice(8, 10) + "/" + dataISO.slice(5, 7) + ")";
-  var nova = chamarNotionAPI("https://api.notion.com/v1/pages", "POST", {
-    "parent": { "database_id": dbId },
-    "properties": {
-      "Day": { "title": [{ "text": { "content": ptitulo } }] },
-      "Date": { "date": { "start": dataISO } }
-    }
-  });
-
-  return nova ? nova.id : null;
-}
-
-function atualizarCheckboxNotion(pageId, propName, valor) {
-  var props = {};
-  props[propName] = { "checkbox": valor };
-  return chamarNotionAPI("https://api.notion.com/v1/pages/" + pageId, "PATCH", { "properties": props });
-}
-
-function atualizarNumeroNotion(pageId, propName, valor) {
-  var props = {};
-  props[propName] = { "number": valor };
-  return chamarNotionAPI("https://api.notion.com/v1/pages/" + pageId, "PATCH", { "properties": props });
-}
-
-function enviarRelatorioSemanalHabitos(chatIdDestino) {
-  var destino = chatIdDestino || ((typeof ConfigService.getPrimary === "function") ? ConfigService.getPrimary("TELEGRAM_CHAT_ID") : String(ConfigService.get("TELEGRAM_CHAT_ID") || "").split(",")[0].trim());
-  if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(destino)) {
-    return false;
-  }
-  var token = ConfigService.get("NOTION_TOKEN");
-  var rawDbId = ConfigService.get("NOTION_HABIT_LOG_DB_ID");
-  var dbId = normalizarNotionId(rawDbId);
-  var tz = ConfigService.get("TIMEZONE", "America/Sao_Paulo");
-
-  if (!token || !dbId) {
-    var detalheFalta = !token && !dbId ? "NOTION_TOKEN e NOTION_HABIT_LOG_DB_ID" : (!token ? "NOTION_TOKEN" : "NOTION_HABIT_LOG_DB_ID");
-    Logger.log("Aviso: Falha ao consultar Habit Log - " + detalheFalta + " ausente.");
-    return enviarMensagemParaChat(destino, "⚠️ O Habit Log não pôde ser consultado: `" + detalheFalta + "` não está configurado no servidor (Render). Configure a variável de ambiente para habilitar.");
-  }
-
-  var dataISO = Utilities.formatDate(new Date(new Date().getTime() - 7 * 86400000), tz, "yyyy-MM-dd");
-  var payload = {
-    "filter": { "property": "Date", "date": { "on_or_after": dataISO } },
-    "sorts": [{ "property": "Date", "direction": "ascending" }]
-  };
-
-  var res = chamarNotionAPI("https://api.notion.com/v1/databases/" + dbId + "/query", "POST", payload);
-  if (!res || !res.results) {
-    return enviarMensagemParaChat(destino, "⚠️ Erro ao consultar o Notion Habit Log. Verifique se a integração possui acesso à base e se o ID está correto.");
-  }
-
-  var cMQ = 0, cGym = 0, cEng = 0, cVio = 0, cLov = 0, cRead = 0, sEn = 0, kEn = 0;
-  for (var i = 0; i < res.results.length; i++) {
-    var p = res.results[i].properties;
-    if (p["🧠 MedQuest"] && p["🧠 MedQuest"].checkbox) cMQ++;
-    if (p["🏋️ Academia"] && p["🏋️ Academia"].checkbox) cGym++;
-    if (p["📚 Inglês"] && p["📚 Inglês"].checkbox) cEng++;
-    if (p["🎸 Violão"] && p["🎸 Violão"].checkbox) cVio++;
-    if (p["❤️ Namorada"] && p["❤️ Namorada"].checkbox) cLov++;
-    if (p["📖 Leitura"] && p["📖 Leitura"].checkbox) cRead++;
-    if (p["⚡ Energia (1–5)"] && p["⚡ Energia (1–5)"].number) {
-      sEn += p["⚡ Energia (1–5)"].number;
-      kEn++;
-    }
-  }
-
-  var media = kEn > 0 ? (sEn / kEn).toFixed(1) : "N/A";
-  var msg = "📊 *FECHAMENTO SEMANAL DE HÁBITOS*\n\n" +
-            "🧠 MedQuest: " + cMQ + " dias\n" +
-            "🏋️ Academia: " + cGym + " dias\n" +
-            "📚 Inglês: " + cEng + " dias\n" +
-            "🎸 Violão: " + cVio + " dias\n" +
-            "❤️ Namorada: " + cLov + " dias\n" +
-            "📖 Leitura: " + cRead + " dias\n" +
-            "⚡ Energia Média: " + media + "/5.0\n";
-
-  var kbSemanal = {
-    inline_keyboard: [
-      [{ text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" }, { text: "🏠 Início", callback_data: "ux:hub:inicio" }]
-    ]
-  };
-  return enviarMensagemComTecladoParaChat(destino, msg, kbSemanal);
-}
-
-/**
- * Criação Avançada no Notion Tasks:
- * Salva as propriedades principais e injeta o texto completo no CORPO da página
- * em blocos de texto/callout, eliminando limitações de tamanho de rich_text.
- */
-function criarTarefaNotion(titulo, area, prioridade, notas) {
-  var dbId = normalizarNotionId(ConfigService.get("NOTION_TASKS_DB_ID"));
-  var tz = ConfigService.get("TIMEZONE", "America/Sao_Paulo");
-  if (!dbId) return false;
-
-  var trechosTitulo = fragmentarTexto(titulo, 1800);
-  var trechosNotas = fragmentarTexto(notas, 1800);
-
-  // Blocos filhos para o corpo da página no Notion
-  var childrenBlocks = [];
-  var blocosNotas = fragmentarTexto(notas, 1900);
-  for (var b = 0; b < blocosNotas.length; b++) {
-    childrenBlocks.push({
-      "object": "block",
-      "type": "paragraph",
-      "paragraph": {
-        "rich_text": [{ "type": "text", "text": { "content": blocosNotas[b] } }]
-      }
-    });
-  }
-
-  var payload = {
-    "parent": { "database_id": dbId },
-    "properties": {
-      "Task": { "title": trechosTitulo.map(function(t) { return { "text": { "content": t } }; }) },
-      "Status": { "select": { "name": "Inbox" } },
-      "Area": { "select": { "name": area || "Internship" } },
-      "Priority": { "select": { "name": prioridade || "2 · Important" } },
-      "Due": { "date": { "start": Utilities.formatDate(new Date(), tz, "yyyy-MM-dd") } },
-      "Notes": { "rich_text": trechosNotas.slice(0, 1).map(function(t) { return { "text": { "content": t } }; }) }
-    },
-    "children": childrenBlocks.slice(0, 80) // Limite de 80 blocos por página na criação
-  };
-
-  var res = chamarNotionAPI("https://api.notion.com/v1/pages", "POST", payload);
-  return res !== null;
-}
-
-function obterDuvidasEstudoLocal() {
-  try {
-    var props = PropertiesService.getScriptProperties();
-    var raw = props.getProperty("duvidas_medquest_lista");
-    if (raw) {
-      var arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return arr;
-    }
-  } catch (_) {}
-  return [];
-}
-
-function salvarDuvidaEstudoLocal(duvidaTexto) {
-  var texto = String(duvidaTexto || "").trim();
-  if (!texto) return null;
-  var tz = (typeof ConfigService !== "undefined" && ConfigService.get) ? ConfigService.get("TIMEZONE", "America/Sao_Paulo") : "America/Sao_Paulo";
-  var agora = new Date();
-  var dataISO = Utilities.formatDate(agora, tz, "yyyy-MM-dd");
-  var hora = Utilities.formatDate(agora, tz, "HH:mm");
-  var id = "duv_" + agora.getTime().toString(36) + "_" + Math.random().toString(36).substring(2, 6);
-
-  var item = {
-    id: id,
-    dataISO: dataISO,
-    hora: hora,
-    texto: texto,
-    status: "pendente"
-  };
-
-  try {
-    var props = PropertiesService.getScriptProperties();
-    var lista = obterDuvidasEstudoLocal();
-    lista.unshift(item);
-    if (lista.length > 50) lista = lista.slice(0, 50);
-    props.setProperty("duvidas_medquest_lista", JSON.stringify(lista));
-  } catch (e) {
-    Logger.log("Erro ao salvar duvida local: " + e.message);
-  }
-
-  return item;
-}
-
-function marcarDuvidaEstudoResolvida(duvidaId) {
-  try {
-    var props = PropertiesService.getScriptProperties();
-    var lista = obterDuvidasEstudoLocal();
-    var modificado = false;
-    for (var i = 0; i < lista.length; i++) {
-      if (lista[i].id === duvidaId) {
-        lista[i].status = "resolvida";
-        modificado = true;
-        break;
-      }
-    }
-    if (modificado) {
-      props.setProperty("duvidas_medquest_lista", JSON.stringify(lista));
-      return true;
-    }
-  } catch (_) {}
-  return false;
-}
-
-function salvarDuvidaEstudoNotion(duvida) {
-  var itemLocal = salvarDuvidaEstudoLocal(duvida);
-  var titulo = "🧠 Dúvida: " + duvida;
-  try {
-    criarTarefaNotion(titulo, "Studies", "2 · Important", "Registrado via Telegram para revisão noturna no MedQuest:\n" + duvida);
-  } catch (_) {}
-  return itemLocal !== null;
-}
-
-function listarDuvidasMedQuest(chatIdDestino, messageId) {
-  var destino = chatIdDestino || ((typeof ConfigService.getPrimary === "function") ? ConfigService.getPrimary("TELEGRAM_CHAT_ID") : String(ConfigService.get("TELEGRAM_CHAT_ID") || "").split(",")[0].trim());
-  var lista = obterDuvidasEstudoLocal().filter(function(d) { return d.status === "pendente"; });
-
-  var msg = "🧠 *MEDQUEST / DÚVIDAS MÉDICAS*\n\n";
-  var botoes = [];
-
-  if (lista.length === 0) {
-    msg += "✨ Nenhuma dúvida pendente no momento!\n\n" +
-      "💡 *Para registrar uma nova dúvida beira-leito:*\n" +
-      "Envie: `/duvida <sua dúvida clínica>`\n" +
-      "Ex: `/duvida Critérios de Light para derrame pleural exsudato vs transudato`";
-  } else {
-    msg += "Pendências salvas para seu bloco de estudo ativo:\n\n";
-    for (var i = 0; i < lista.length; i++) {
-      var d = lista[i];
-      msg += (i + 1) + ". *" + d.texto + "*\n" +
-             "   📅 `" + d.dataISO + " às " + d.hora + "`\n\n";
-      if (i < 5) {
-        botoes.push([{ text: "✅ Resolver #" + (i + 1), callback_data: "duvida:check:" + d.id }]);
-      }
-    }
-  }
-
-  botoes.push([
-    { text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" },
-    { text: "🏠 Início", callback_data: "ux:hub:inicio" }
-  ]);
-
-  var teclado = { inline_keyboard: botoes };
-  if (messageId && typeof enviarTelaBot === "function") {
-    return enviarTelaBot(destino, msg, teclado, messageId);
-  }
-  return enviarMensagemComTecladoParaChat(destino, msg, teclado);
-}
-
-function listarTarefasHojeNotion(chatIdDestino, messageId) {
-  var destino = chatIdDestino || ((typeof ConfigService.getPrimary === "function") ? ConfigService.getPrimary("TELEGRAM_CHAT_ID") : String(ConfigService.get("TELEGRAM_CHAT_ID") || "").split(",")[0].trim());
-  var dbId = normalizarNotionId(ConfigService.get("NOTION_TASKS_DB_ID"));
-  var tz = ConfigService.get("TIMEZONE", "America/Sao_Paulo");
-
-  var kbTarefas = {
-    inline_keyboard: [
-      [{ text: "🔄 Atualizar Tarefas", callback_data: "ux:rotina:tasks" }],
-      [{ text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" }, { text: "🏠 Início", callback_data: "ux:hub:inicio" }]
-    ]
-  };
-
-  if (!dbId) {
-    var msgSemDb = "⚠️ *Notion Tasks DB não configurado.*\n\nConfigure a variável `NOTION_TASKS_DB_ID` no ambiente para sincronizar suas tarefas.";
-    if (messageId && typeof enviarTelaBot === "function") return enviarTelaBot(destino, msgSemDb, kbTarefas, messageId);
-    return enviarMensagemComTecladoParaChat(destino, msgSemDb, kbTarefas);
-  }
-
-  var hojeISO = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
-  var payload = {
-    "filter": {
-      "or": [
-        { "property": "Due", "date": { "on_or_before": hojeISO } },
-        { "property": "Status", "select": { "equals": "Inbox" } }
-      ]
-    },
-    "sorts": [{ "property": "Due", "direction": "ascending" }],
-    "page_size": 15
-  };
-
-  var res = (typeof chamarNotionAPI === "function") ? chamarNotionAPI("https://api.notion.com/v1/databases/" + dbId + "/query", "POST", payload) : null;
-  if (!res || !res.results) {
-    var msgErro = "⚠️ Erro ao consultar o Notion Tasks. Tente novamente em instantes.";
-    if (messageId && typeof enviarTelaBot === "function") return enviarTelaBot(destino, msgErro, kbTarefas, messageId);
-    return enviarMensagemComTecladoParaChat(destino, msgErro, kbTarefas);
-  }
-  if (res.results.length === 0) {
-    var msgVazio = "📋 *Tarefas do Notion:* Nenhuma pendência para hoje ou no Inbox! Tudo zerado. 🎉\n\n💡 *Para adicionar nova tarefa:* Digite `/task <descrição>` ou envie por voz.";
-    if (messageId && typeof enviarTelaBot === "function") return enviarTelaBot(destino, msgVazio, kbTarefas, messageId);
-    return enviarMensagemComTecladoParaChat(destino, msgVazio, kbTarefas);
-  }
-
-  var msg = "📋 *SUAS PENDÊNCIAS NO NOTION TASKS:*\n\n";
-  for (var i = 0; i < res.results.length; i++) {
-    var item = res.results[i];
-    var props = item.properties;
-    var titulo = "Sem título";
-    if (props.Task && props.Task.title && props.Task.title.length > 0) {
-      titulo = props.Task.title[0].text.content;
-    }
-    var status = (props.Status && props.Status.select) ? props.Status.select.name : "Inbox";
-    var area = (props.Area && props.Area.select) ? props.Area.select.name : "";
-    var due = (props.Due && props.Due.date) ? props.Due.date.start : "Sem data";
-
-    msg += (i + 1) + ") *" + titulo + "*\n";
-    msg += "   • `[" + status + "]` | " + (area ? "*" + area + "* | " : "") + "📅 " + due + "\n\n";
-  }
-
-  msg += "💡 *Dica:* Para adicionar nova tarefa, digite `/task <descrição>`.";
-  if (messageId && typeof enviarTelaBot === "function") {
-    return enviarTelaBot(destino, msg, kbTarefas, messageId);
-  }
-  return enviarMensagemComTecladoParaChat(destino, msg, kbTarefas);
-}
-
-/**
- * Marcação Proativa de Hábitos no Habit Log de Hoje
- * Chamado automaticamente quando o usuário relata ter treinado, estudado, etc.
- */
-function marcarHabitoProativoHoje(textoRelato) {
-  var tz = ConfigService.get("TIMEZONE", "America/Sao_Paulo");
-  var hojeISO = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
-  var pageId = obterOuCriarPaginaHabitLog(hojeISO);
-  if (!pageId) return null;
-
-  var t = (textoRelato || "").toLowerCase();
-  var habitosMarcados = [];
-
-  if (t.indexOf("medquest") !== -1 || t.indexOf("quest") !== -1 || t.indexOf("anki") !== -1 || t.indexOf("estud") !== -1) {
-    if (atualizarCheckboxNotion(pageId, "🧠 MedQuest", true)) {
-      habitosMarcados.push("🧠 MedQuest");
-    }
-  }
-  if (t.indexOf("academia") !== -1 || t.indexOf("trein") !== -1 || t.indexOf("muscula") !== -1 || t.indexOf("supino") !== -1 || t.indexOf("perna") !== -1) {
-    if (atualizarCheckboxNotion(pageId, "🏋️ Academia", true)) {
-      habitosMarcados.push("🏋️ Academia");
-    }
-  }
-  if (t.indexOf("ingl") !== -1 || t.indexOf("english") !== -1) {
-    if (atualizarCheckboxNotion(pageId, "📚 Inglês", true)) {
-      habitosMarcados.push("📚 Inglês");
-    }
-  }
-  if (t.indexOf("viol") !== -1 || t.indexOf("guitar") !== -1) {
-    if (atualizarCheckboxNotion(pageId, "🎸 Violão", true)) {
-      habitosMarcados.push("🎸 Violão");
-    }
-  }
-  if (t.indexOf("namorada") !== -1 || t.indexOf("date") !== -1 || t.indexOf("amor") !== -1) {
-    if (atualizarCheckboxNotion(pageId, "❤️ Namorada", true)) {
-      habitosMarcados.push("❤️ Namorada");
-    }
-  }
-  if (t.indexOf("livro") !== -1 || t.indexOf("leitura") !== -1 || t.indexOf("li ") !== -1) {
-    if (atualizarCheckboxNotion(pageId, "📖 Leitura", true)) {
-      habitosMarcados.push("📖 Leitura");
-    }
-  }
-
-  return habitosMarcados;
-}
-
-/**
- * Captura Rápida de Pensamentos / Insights (Segunda Mente)
- */
-function criarNotaSegundaMenteNotion(textoNota) {
-  var tz = ConfigService.get("TIMEZONE", "America/Sao_Paulo");
-  var titulo = "💡 Insight · " + Utilities.formatDate(new Date(), tz, "dd/MM HH:mm");
-  return criarTarefaNotion(titulo, "Personal", "3 · Medium", textoNota);
 }
 
 
@@ -52154,16 +51722,14 @@ var RotinaService = {
     var alterado = false;
     var resumoAcao = "";
 
-    // 1.1. Remoção ou cancelamento explícito de plantão (incluindo plantões de sniper ou testes)
-    if (/(?:remover|excluir|apagar|tirar|cancelar|dispensar)\s+(?:o\s+)?(?:plant[aã]o|cobertura|sniper)/i.test(instLower) ||
+    // 1.1. Remoção ou cancelamento explícito de plantão
+    if (/(?:remover|excluir|apagar|tirar|cancelar|dispensar)\s+(?:o\s+)?(?:plant[aã]o|cobertura)/i.test(instLower) ||
         /(?:n[aã]o\s+vou|sem)\s+(?:ter\s+)?plant[aã]o/i.test(instLower)) {
       var blocosSemPlantao = [];
       var removidos = 0;
       for (var ip = 0; ip < blocos.length; ip++) {
         var bp = blocos[ip];
         var ehPlantao = bp.categoria === "plantao" ||
-          (bp.id && String(bp.id).indexOf("plantao_sniper_") === 0) ||
-          (bp.nota && bp.nota.indexOf("Sniper") !== -1) ||
           /plant[aã]o/i.test(bp.titulo || "");
         if (ehPlantao) {
           removidos++;
@@ -53183,6 +52749,124 @@ function gerarResumoFimPlantao(chatIdDestino, messageId) {
   return enviarMensagemComTecladoParaChat(destino, msg, botoes);
 }
 
+/**
+ * Marca proativamente hábitos detectados em texto/áudio no armazenamento local
+ */
+function marcarHabitoProativoHoje(textoRelato) {
+  var texto = String(textoRelato || "").toLowerCase();
+  if (!texto) return [];
+
+  var tz = (typeof ConfigService !== "undefined" && ConfigService.get)
+    ? ConfigService.get("TIMEZONE", "America/Sao_Paulo")
+    : "America/Sao_Paulo";
+  var dataISO = (typeof Utilities !== "undefined" && Utilities.formatDate)
+    ? Utilities.formatDate(new Date(), tz, "yyyy-MM-dd")
+    : new Date().toISOString().slice(0, 10);
+
+  var regras = [
+    { key: "habit_medquest", label: "🧠 MedQuest", regex: /\b(?:medquest|quest[oõ]es|anki|flashcard|estudei)\b/i },
+    { key: "habit_gym", label: "🏋️ Treino / Academia", regex: /\b(?:trein(?:o|ei)|academia|muscula[çc][aã]o|corrida|cardio)\b/i },
+    { key: "habit_english", label: "📚 Inglês", regex: /\b(?:ingl[eê]s|english|listening|shadowing)\b/i },
+    { key: "habit_guitar", label: "🎸 Violão", regex: /\b(?:viol[aã]o|m[uú]sica|toquei)\b/i },
+    { key: "habit_reading", label: "📖 Leitura", regex: /\b(?:li\s+\d+|leitura|livro|cap[ií]tulo)\b/i },
+    { key: "habit_love", label: "❤️ Tempo de Qualidade", regex: /\b(?:namorada|encontro|date)\b/i }
+  ];
+
+  var marcados = [];
+  var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+    ? PropertiesService.getScriptProperties()
+    : null;
+
+  for (var i = 0; i < regras.length; i++) {
+    if (regras[i].regex.test(texto)) {
+      if (props) {
+        try {
+          props.setProperty("habito_" + dataISO + "_" + regras[i].key, "true");
+        } catch (_) {}
+      }
+      marcados.push(regras[i].label);
+    }
+  }
+  return marcados;
+}
+
+/**
+ * Relatório Semanal Local de Hábitos & Energia (/semana, /relatorio, /habitos)
+ */
+function enviarRelatorioSemanalHabitos(chatIdDestino, messageId) {
+  var destino = chatIdDestino || ((typeof ConfigService !== "undefined" && ConfigService.getPrimary)
+    ? ConfigService.getPrimary("TELEGRAM_CHAT_ID")
+    : String((typeof ConfigService !== "undefined" && ConfigService.get("TELEGRAM_CHAT_ID")) || "").split(",")[0].trim());
+
+  if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(destino)) {
+    return false;
+  }
+
+  var tz = (typeof ConfigService !== "undefined" && ConfigService.get)
+    ? ConfigService.get("TIMEZONE", "America/Sao_Paulo")
+    : "America/Sao_Paulo";
+  var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+    ? PropertiesService.getScriptProperties()
+    : null;
+  var allProps = props ? (props.getProperties() || {}) : {};
+
+  var habitosDefs = [
+    { key: "habit_medquest", label: "🧠 MedQuest / Estudo", count: 0 },
+    { key: "habit_gym", label: "🏋️ Treino / Academia", count: 0 },
+    { key: "habit_english", label: "📚 Inglês", count: 0 },
+    { key: "habit_guitar", label: "🎸 Violão", count: 0 },
+    { key: "habit_reading", label: "📖 Leitura", count: 0 },
+    { key: "habit_love", label: "❤️ Tempo de Qualidade", count: 0 }
+  ];
+
+  var somaEnergia = 0;
+  var diasEnergia = 0;
+  var hoje = new Date();
+
+  for (var d = 0; d < 7; d++) {
+    var dia = new Date(hoje.getTime() - (d * 86400000));
+    var dISO = (typeof Utilities !== "undefined" && Utilities.formatDate)
+      ? Utilities.formatDate(dia, tz, "yyyy-MM-dd")
+      : dia.toISOString().slice(0, 10);
+
+    for (var h = 0; h < habitosDefs.length; h++) {
+      if (allProps["habito_" + dISO + "_" + habitosDefs[h].key] === "true") {
+        habitosDefs[h].count++;
+      }
+    }
+    var energiaRaw = allProps["habito_" + dISO + "_energia"];
+    if (energiaRaw) {
+      var eNum = parseInt(energiaRaw, 10);
+      if (!isNaN(eNum) && eNum >= 1 && eNum <= 5) {
+        somaEnergia += eNum;
+        diasEnergia++;
+      }
+    }
+  }
+
+  var mediaEnergia = diasEnergia > 0 ? (somaEnergia / diasEnergia).toFixed(1) + "/5.0" : "Sem registros";
+  var msg = "📊 *RELATÓRIO SEMANAL DE HÁBITOS (ÚLTIMOS 7 DIAS)*\n\n";
+  for (var idx = 0; idx < habitosDefs.length; idx++) {
+    var item = habitosDefs[idx];
+    var pct = Math.round((item.count / 7) * 100);
+    msg += "• " + item.label + ": *" + item.count + "/7 dias* (`" + pct + "%`)\n";
+  }
+  msg += "\n🔋 *Energia Média:* " + mediaEnergia + " (" + diasEnergia + " dia(s) avaliado(s))\n" +
+    "💾 _Persistido localmente em memória rápida._";
+
+  var kb = {
+    inline_keyboard: [
+      [{ text: "🌙 Check-in Hoje", callback_data: "ux:rotina:checkin" }, { text: "📊 Aderência Timeline", callback_data: "rotina:aderencia" }],
+      [{ text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" }, { text: "🏠 Início", callback_data: "ux:hub:inicio" }]
+    ]
+  };
+
+  if (messageId && typeof enviarTelaBot === "function") {
+    return enviarTelaBot(destino, msg, kb, messageId);
+  }
+  return enviarMensagemComTecladoParaChat(destino, msg, kb);
+}
+
 
 // ==============================================================================
 // ARQUIVO FONTE: 07a_telegram_router.js
@@ -53810,7 +53494,7 @@ function tratarComandoStatus(chatId) {
     "• *Modo:* Servidor Oficial Node.js 20+ / Docker (Render 24/7)\n" +
     "• *" + nomeRedeSt + ":* " + stRemume + "\n" +
     "• *Base de Interações:* " + stInteracoes + "\n" +
-    "• *Notion & Calendar:* ✅ Operacionais\n\n" +
+    "• *Google Calendar & Rotina Local:* ✅ Operacionais\n\n" +
     "💡 Digite /menu para voltar ao início ou toque abaixo:";
   var kbStatus = {
     inline_keyboard: [
@@ -53818,36 +53502,6 @@ function tratarComandoStatus(chatId) {
     ]
   };
   return enviarMensagemComTecladoParaChat(chatId, msgStatus, kbStatus);
-}
-
-/**
- * Despacho do executor local de tarefas (PC).
- */
-function tratarComandoPc(chatId, texto) {
-  var partesPc = texto.split(/\s+/);
-  var tarefaPc = partesPc[1] ? partesPc[1].toLowerCase() : "";
-  var argsPc = partesPc.slice(2);
-
-  if (!tarefaPc || tarefaPc === "ajuda" || tarefaPc === "help") {
-    var msgAjudaPc = "🖥️ *PONTE DE EXECUÇÃO LOCAL (PC)*\n\n" +
-      "Envie uma ordem para o seu computador executar em segundo plano:\n\n" +
-      "• `/pc sync` — Sincronização de agenda e estudos\n" +
-      "• `/pc audit` — Auditoria de sobreposições no calendário\n" +
-      "• `/pc status` — Verifica se o daemon do PC está ativo\n\n" +
-      "💡 *Funcionamento:* A ordem é enfileirada na nuvem. Se o seu PC estiver ligado, ele executa e devolve o relatório aqui. Se estiver desligado, roda assim que o PC for ligado!";
-    return enviarMensagemParaChat(chatId, msgAjudaPc);
-  }
-
-  if (typeof enfileirarTarefaPc === "function") {
-    var taskId = enfileirarTarefaPc(chatId, tarefaPc, argsPc);
-    var msgOk = "⚡ *Ordem enfileirada na nuvem com sucesso!*\n\n" +
-      "• *Tarefa:* `" + tarefaPc + "`\n" +
-      "• *ID:* `" + taskId + "`\n\n" +
-      "🕒 O runner local processará silenciosamente e enviará o relatório completo aqui assim que concluído.";
-    return enviarMensagemParaChat(chatId, msgOk);
-  } else {
-    return enviarMensagemParaChat(chatId, "⚠️ Fila de tarefas locais temporariamente indisponível.");
-  }
 }
 
 /**
@@ -54128,9 +53782,6 @@ function rotearComandoSistema(comando, texto, chatId) {
     },
     "/contingencia": function() {
       return cmdHandlers["/offline"]();
-    },
-    "/pc": function() {
-      return tratarComandoPc(chatId, texto);
     },
     "/rx": function() {
       return tratarComandoRx(chatId, texto);
@@ -54503,11 +54154,6 @@ function rotearAtalhoTecladoFixo(texto, comando, chatId) {
   // 7. Agenda
   if (texto === "📅 Agenda") {
     return { executado: true, resultado: consultarEventosAgenda("hoje", chatId) };
-  }
-
-  // 8. Minhas Tarefas
-  if (texto === "📋 Minhas Tarefas") {
-    return { executado: true, resultado: listarTarefasHojeNotion(chatId) };
   }
 
   // 9. Gasometria
@@ -59058,13 +58704,7 @@ var TABELA_COMANDOS_AGENDA_ROTINA_AUDIO_ = {
   "/preceptor": true,
   "/voz": true,
   "/sabatina": true,
-  "/v": true,
-  "/audio": true,
-  "/a": true,
   "/agenda": true,
-  "/task": true,
-  "/tarefa": true,
-  "/tasks": true,
   "/duvida": true,
   "/duvidas": true,
   "/semana": true,
@@ -59073,10 +58713,6 @@ var TABELA_COMANDOS_AGENDA_ROTINA_AUDIO_ = {
   "/checkin": true,
   "/briefing": true,
   "/rotina": true,
-  "/sniper": true,
-  "/vagas": true,
-  "/plantoes": true,
-  "/piso": true,
   "/protocolo": true
 };
 
@@ -59108,8 +58744,8 @@ function executarComandoAgendaRotinaAudioInterno_(comando, texto, chatId, messag
     return responderPreceptorVozComIA(chatId, dadosPreceptor);
   }
 
-  if (comando === "/voz" || comando === "/sabatina" || comando === "/v" || comando === "/audio" || comando === "/a") {
-    var dadosVoz = texto.replace(/^\/(voz|sabatina|v|audio|a)\s*/i, "").trim();
+  if (comando === "/voz" || comando === "/sabatina") {
+    var dadosVoz = texto.replace(/^\/(voz|sabatina)\s*/i, "").trim();
     if (!dadosVoz) {
       if (typeof iniciarOuConvidarDiscussaoPreceptor === "function") {
         return iniciarOuConvidarDiscussaoPreceptor(chatId, { ehAudio: false });
@@ -59208,7 +58844,7 @@ function processarMensagemTexto(message) {
         "menu", "ajuda", "help", "manual", "start", "novo", "cancelar", "cockpit", "app",
         "perfil", "nome", "carimbo", "cidade", "cenario", "unidade", "importar_unidade", "importar_remume", "aprovar_remume", "solicitacoes_remume", "fila_remume",
         "soap", "rx", "rxh", "gaso", "winter", "crcl", "clcr", "clearance", "dva", "sri", "iot", "compatibilidade", "compatibilidade_y", "remume",
-        "sniper", "vagas", "piso", "ctg", "cardiotocografia", "distocia", "helperr", "sangramento1tri", "abortamento", "ectopica", "violencia_sexual", "violenciasexual", "estupro", "pep_go", "mastite", "bartholin",
+        "ctg", "cardiotocografia", "distocia", "helperr", "sangramento1tri", "abortamento", "ectopica", "violencia_sexual", "violenciasexual", "estupro", "pep_go", "mastite", "bartholin",
         "pcr", "acls", "conduta", "atb", "ped", "pals", "passagem", "sbar", "plantao", "leito", "enfermaria",
         "prenatal", "parto", "ginecologia", "go", "obstetricia", "oftalmo", "vertigem", "epistaxe", "colica",
         "asma", "dpoc", "icc", "frax", "quedas", "dermato", "toxo", "rcf", "saf",
@@ -59755,7 +59391,7 @@ function processarMensagemTexto(message) {
   if (decisao.intencao === "HABITO_PROATIVO") {
     var habitosMarcados = marcarHabitoProativoHoje(texto);
     if (habitosMarcados && habitosMarcados.length > 0) {
-      return enviarMensagemParaChat(chatId, "⚡ *Hábito registrado proativamente no Notion Habit Log!*\n\n✅ " + habitosMarcados.join("\n✅ ") + "\n\nSeu check-in noturno já estará atualizado! 🚀");
+      return enviarMensagemParaChat(chatId, "⚡ *Hábito registrado proativamente no rastreador local!*\n\n✅ " + habitosMarcados.join("\n✅ ") + "\n\nSeu check-in noturno já estará atualizado! 🚀");
     }
   }
 
@@ -59837,19 +59473,11 @@ function processarMensagemTexto(message) {
     return processarEEntregarIA(chatId, gerarCondutaEmergenciaComIA, texto, "conduta");
   }
 
-  if (decisao.intencao === "NOTION_TASK") {
-    if (!ehUsuarioTitular(chatId)) return enviarMensagemParaChat(chatId, "🔒 O banco do Notion é exclusivo do titular. Use o /menu para consultar calculadoras e condutas médicas.");
-    var okNovaTask = criarTarefaNotion(texto, "Personal", "2 · Important", "Captura autônoma via Telegram");
-    if (okNovaTask) return enviarMensagemParaChat(chatId, "✅ *Tarefa salva no Inbox do Notion Tasks!*");
-    enviarMensagemParaChat(chatId, "❌ Falha ao salvar no Notion. O pedido foi preservado na fila local ou verifique a configuração.");
-    return false;
-  }
-
-  if (decisao.intencao === "NOTION_DUVIDA") {
-    if (!ehUsuarioTitular(chatId)) return enviarMensagemParaChat(chatId, "🔒 O banco do Notion é exclusivo do titular. Use o /menu para consultar calculadoras e condutas médicas.");
+  if (decisao.intencao === "ESTUDO_DUVIDA" || decisao.intencao === "NOTION_DUVIDA") {
+    if (!ehUsuarioTitular(chatId)) return enviarMensagemParaChat(chatId, "🔒 O banco de dúvidas é exclusivo do titular. Use o /menu para consultar calculadoras e condutas médicas.");
     var duvTexto = texto.replace(/^(?:minha\s+)?d[úu]vida(?:\s+para\s+o\s+medquest)?\s*[:=]?\s*/i, "").trim();
-    var okDuv = salvarDuvidaEstudoNotion(duvTexto || texto);
-    if (okDuv) return enviarMensagemParaChat(chatId, "🧠 *Dúvida arquivada no Notion para o MedQuest!*");
+    var itemDuv = (typeof salvarDuvidaEstudoLocal === "function") ? salvarDuvidaEstudoLocal(duvTexto || texto) : null;
+    if (itemDuv) return enviarMensagemParaChat(chatId, "🧠 *Dúvida arquivada no banco local para o MedQuest!*\n\n💡 Digite `/duvidas` para revisar.");
   }
 
   if (decisao.intencao === "EVIDENCIA_MEDICA") {
@@ -59875,12 +59503,6 @@ function processarMensagemTexto(message) {
 
   if (decisao.intencao === "ENFERMARIA") {
     return enviarPainelEnfermaria(chatId, 0);
-  }
-
-  if (decisao.intencao === "SEGUNDA_MENTE") {
-    if (!ehUsuarioTitular(chatId)) return enviarMensagemParaChat(chatId, "🔒 O Second Brain do Notion é exclusivo do titular.");
-    var okNota = criarNotaSegundaMenteNotion(texto);
-    if (okNota) return enviarMensagemParaChat(chatId, "💡 *Insight arquivado no Notion Second Brain!*");
   }
 
   // 6. CONVERSAÇÃO NATURAL E DÚVIDAS MÉDICAS EM LINGUAGEM NATURAL (GROQ / OPENROUTER)
@@ -60101,7 +59723,6 @@ function processarRespostaPreceptorSocratico(chatId, textoResposta, ehAudio) {
  */
 function responderPreceptorVozComIA(chatId, casoOuDuvida, opcoes) {
   opcoes = opcoes || {};
-  enviarChatAction(chatId, "record_voice", true);
 
   var kbAcoes = {
     "inline_keyboard": [
@@ -60112,26 +59733,23 @@ function responderPreceptorVozComIA(chatId, casoOuDuvida, opcoes) {
     ]
   };
 
-function extrairTextoLocucaoSoap_(texto) {
-  if (!texto) return "";
-  var t = String(texto).trim();
-  var matchAvaliacao = t.match(/(?:🧠\s*\*?AVALIA[ÇC][ÃA]O|Hipótese|Conduta)[\s\S]*/i);
-  if (matchAvaliacao && matchAvaliacao[0].length >= 30) {
-    return matchAvaliacao[0].trim();
+  function extrairTextoLocucaoSoap_(texto) {
+    if (!texto) return "";
+    var t = String(texto).trim();
+    var matchAvaliacao = t.match(/(?:🧠\s*\*?AVALIA[ÇC][ÃA]O|Hipótese|Conduta)[\s\S]*/i);
+    if (matchAvaliacao && matchAvaliacao[0].length >= 30) {
+      return matchAvaliacao[0].trim();
+    }
+    return t;
   }
-  return t;
-}
 
-  // Se opcoes.apenasNarrar === true ou se opcoes.textoPronto foi fornecido, pula a geração de texto e vai direto para TTS
-  // (usado pelo callback "Ouvir no Fone" para narrar texto já existente)
+  // 1. Narração sob demanda (botão "🎧 Ouvir no Fone" ou apenasNarrar): síntese TTS direta sem rechamada de LLM
   var textoBaseNarrar = (opcoes && opcoes.textoPronto) || (opcoes && opcoes.apenasNarrar && casoOuDuvida);
   if (textoBaseNarrar) {
     enviarChatAction(chatId, "record_voice", true);
     var textoLocucao = extrairTextoLocucaoSoap_(textoBaseNarrar);
-    var resDireto = (typeof gerarAudioPreceptorDireto === "function")
-      ? gerarAudioPreceptorDireto(null, { textoPronto: textoLocucao })
-      : null;
-    var blobNarrado = (resDireto && resDireto.audioBlob) || sintetizarVozPreceptor(typeof _iaTextoFalado === "function" ? _iaTextoFalado(textoLocucao) : textoLocucao);
+    var textoFalado = (typeof _iaTextoFalado === "function") ? _iaTextoFalado(textoLocucao) : textoLocucao;
+    var blobNarrado = sintetizarVozPreceptor(textoFalado);
     if (blobNarrado) {
       var resumoLegenda = String(textoLocucao).trim();
       if (resumoLegenda.length > 750) {
@@ -60147,61 +59765,15 @@ function extrairTextoLocucaoSoap_(texto) {
       var enviadoNarrado = enviarAudioVozTelegram(chatId, blobNarrado, legendaNarrada, kbAcoes);
       if (enviadoNarrado) return true;
     }
-    // Se a síntese ou envio falhar, emite aviso claro sem poluir o chat com duplicação de texto
     return enviarMensagemParaChat(
       chatId,
-      "⚠️ *Transmissão de Áudio:* Não foi possível processar a locução de voz no momento devido a indisponibilidade temporária. O caso clínico e as condutas permanecem disponíveis acima."
+      "⚠️ *Transmissão de Áudio:* Não foi possível processar a locução de voz no momento. O caso clínico e as condutas permanecem disponíveis acima."
     );
   }
 
-  // Variável que preserva texto entre modo direto e fallback,
-  // evitando chamar o LLM de novo se apenas o TTS falhou
-  var textoGeradoDireto = null;
-
-  // 1. MODO RÁPIDO: Geração direta de áudio em tempo único (Single-Pass Audio)
-  if (typeof gerarAudioPreceptorDireto === "function") {
-    try {
-      var resDireto = gerarAudioPreceptorDireto(casoOuDuvida, opcoes);
-      if (resDireto && resDireto.audioBlob) {
-        enviarChatAction(chatId, "record_voice", true);
-        if (typeof renovarChatActionSeNecessario === "function") {
-          renovarChatActionSeNecessario(chatId, "record_voice");
-        }
-        var txtDir = String(resDireto.texto || "");
-        var numAstDir = (txtDir.match(/\*/g) || []).length;
-        if (numAstDir % 2 !== 0) txtDir += "*";
-        var numCrDir = (txtDir.match(/`/g) || []).length;
-        if (numCrDir % 2 !== 0) txtDir += "`";
-        var legendaDireta = "🎧 *Preceptor Socrático:*\n" + txtDir;
-        salvarDialogoPreceptor(chatId, {
-          em_andamento: true,
-          caso_base: casoOuDuvida,
-          ultima_pergunta: resDireto.texto,
-          historico: [{ papel: "preceptor", texto: resDireto.texto }]
-        });
-        if (typeof definirModoBot !== "undefined") {
-          definirModoBot(chatId, "voz", casoOuDuvida);
-        }
-        var enviadoDireto = enviarAudioVozTelegram(chatId, resDireto.audioBlob, legendaDireta, kbAcoes);
-        if (enviadoDireto) return true;
-      }
-      // Se o modo direto gerou texto mas o envio/TTS falhou,
-      // preserva o texto para o fallback não precisar chamar o LLM de novo
-      if (resDireto && resDireto.texto) {
-        textoGeradoDireto = resDireto.texto;
-      }
-    } catch (eDireto) {
-      Logger.log("Geração direta de áudio falhou; recorrendo ao modo em dois tempos: " + eDireto.message);
-    }
-  }
-
-  // 2. FALLBACK RESILIENTE EM DOIS TEMPOS (Texto -> TTS)
-  // CORREÇÃO: reutiliza textoGeradoDireto se disponível, evitando chamada LLM redundante
-  enviarChatAction(chatId, "record_voice", true);
-  if (typeof renovarChatActionSeNecessario === "function") {
-    renovarChatActionSeNecessario(chatId, "record_voice");
-  }
-  var provocacao = textoGeradoDireto || gerarProvocacaoPreceptorAudio(casoOuDuvida);
+  // 2. Geração única da provocação socrática (sem geração duplicada)
+  enviarChatAction(chatId, opcoes.ehAudio ? "record_voice" : "typing", true);
+  var provocacao = (typeof gerarProvocacaoPreceptorAudio === "function") ? gerarProvocacaoPreceptorAudio(casoOuDuvida) : "";
   if (!provocacao) {
     provocacao = "Diante deste quadro clínico, qual é a principal hipótese diagnóstica e a conduta imediata para descartar gravidade?";
   }
@@ -60215,18 +59787,21 @@ function extrairTextoLocucaoSoap_(texto) {
     definirModoBot(chatId, "voz", casoOuDuvida);
   }
 
-  enviarChatAction(chatId, "record_voice", true);
-  if (typeof renovarChatActionSeNecessario === "function") {
-    renovarChatActionSeNecessario(chatId, "record_voice");
-  }
-  var audioBlob = sintetizarVozPreceptor(provocacao);
-  if (audioBlob) {
-    var legenda = "🎧 *Preceptor Socrático:*\n" + provocacao;
-    var enviado = enviarAudioVozTelegram(chatId, audioBlob, legenda, kbAcoes);
-    if (enviado) return true;
+  // 3. Só sintetiza áudio automaticamente se o usuário enviou áudio originalmente
+  if (opcoes.ehAudio) {
+    enviarChatAction(chatId, "record_voice", true);
+    if (typeof renovarChatActionSeNecessario === "function") {
+      renovarChatActionSeNecessario(chatId, "record_voice");
+    }
+    var audioBlob = sintetizarVozPreceptor(provocacao);
+    if (audioBlob) {
+      var legenda = "🎧 *Preceptor Socrático:*\n" + provocacao;
+      var enviado = enviarAudioVozTelegram(chatId, audioBlob, legenda, kbAcoes);
+      if (enviado) return true;
+    }
   }
 
-  // 3. FALLBACK FINAL EM TEXTO COM BOTÃO INLINE
+  // 4. Padrão rápido para texto (ou fallback de áudio): resposta imediata com botão "🎧 Ouvir no Fone"
   var cacheKey = Utilities.getUuid().replace(/-/g, "");
   safePutCache(CacheService.getScriptCache(), cacheKey, provocacao, 21600);
   var kbTexto = {
@@ -61194,12 +60769,12 @@ function obterContextoCallback_(cb) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * A. HÁBITOS E ENERGIA (Notion Habit Log)
+ * A. HÁBITOS E ENERGIA (Persistência Local Rápida)
  */
 function tratarCallbackHabitoEEnergia_(cb, data, ctx) {
   var chatCbHabit = ctx.chatId;
   if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(chatCbHabit)) {
-    responderCallbackTelegram(cb.id, "🔒 O Habit Tracker do Notion é exclusivo do titular.", true);
+    responderCallbackTelegram(cb.id, "🔒 O rastreador de hábitos é exclusivo do titular.", true);
     return true;
   }
   if (cb && cb.id && typeof responderCallbackTelegram === "function") {
@@ -61209,7 +60784,6 @@ function tratarCallbackHabitoEEnergia_(cb, data, ctx) {
   }
   var tz = (typeof ConfigService !== "undefined" && ConfigService.get) ? ConfigService.get("TIMEZONE", "America/Sao_Paulo") : "America/Sao_Paulo";
   var dataISO = ctx.dataAlvoISO || Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
-  var pageId = (typeof obterOuCriarPaginaHabitLog === "function") ? obterOuCriarPaginaHabitLog(dataISO) : null;
 
   var kb = cb.message && cb.message.reply_markup ? cb.message.reply_markup.inline_keyboard : null;
   var valorStatus = true;
@@ -61226,39 +60800,19 @@ function tratarCallbackHabitoEEnergia_(cb, data, ctx) {
   }
 
   var gravouComSucesso = false;
-  if (data.startsWith("habit_")) {
-    var mapaHabitos = {
-      "habit_medquest": "🧠 MedQuest",
-      "habit_gym": "🏋️ Academia",
-      "habit_english": "📚 Inglês",
-      "habit_guitar": "🎸 Violão",
-      "habit_love": "❤️ Namorada",
-      "habit_reading": "📖 Leitura"
-    };
-    var propName = mapaHabitos[data] || "";
-    if (pageId && propName && typeof atualizarCheckboxNotion === "function") {
-      gravouComSucesso = Boolean(atualizarCheckboxNotion(pageId, propName, valorStatus));
-    } else if (!pageId) {
-      // Fallback resiliente: persiste localmente se Notion não estiver configurado
-      try {
-        var props = PropertiesService.getScriptProperties();
-        props.setProperty("habito_" + dataISO + "_" + data, valorStatus ? "true" : "false");
-        gravouComSucesso = true;
-      } catch (_) {}
-    }
-  } else if (data.startsWith("energy_")) {
-    var valorEnergia = parseInt(data.replace("energy_", ""), 10);
-    if (pageId && typeof atualizarNumeroNotion === "function") {
-      gravouComSucesso = Boolean(atualizarNumeroNotion(pageId, "⚡ Energia (1–5)", valorEnergia));
-    } else if (!pageId) {
-      // Fallback resiliente para escala de energia se Notion não estiver configurado
-      try {
-        var props = PropertiesService.getScriptProperties();
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (data.startsWith("habit_")) {
+      props.setProperty("habito_" + dataISO + "_" + data, valorStatus ? "true" : "false");
+      gravouComSucesso = true;
+    } else if (data.startsWith("energy_")) {
+      var valorEnergia = parseInt(data.replace("energy_", ""), 10);
+      if (!isNaN(valorEnergia)) {
         props.setProperty("habito_" + dataISO + "_energia", String(valorEnergia));
         gravouComSucesso = true;
-      } catch (_) {}
+      }
     }
-  }
+  } catch (_) {}
 
   if (gravouComSucesso) {
     if (kb && cb.message && cb.message.chat) {
@@ -61294,7 +60848,7 @@ function tratarCallbackHabitoEEnergia_(cb, data, ctx) {
 }
 
 /**
- * A1.1 DÚVIDAS E PENDÊNCIAS CLÍNICAS (MEDQUEST / NOTION)
+ * A1.1 DÚVIDAS E PENDÊNCIAS CLÍNICAS (MEDQUEST LOCAL)
  */
 function tratarCallbackDuvidasMedQuest_(cb, data, ctx) {
   if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(ctx.chatId)) {
@@ -61327,10 +60881,6 @@ function tratarCallbackRotinaProdutividade_(cb, data, ctx) {
   if (data === "rotina_agenda") {
     responderCallbackTelegram(cb.id, "Consultando agenda...");
     return consultarEventosAgenda("", ctx.chatId, ctx.msgId);
-  }
-  if (data === "rotina_tasks") {
-    responderCallbackTelegram(cb.id, "Carregando tarefas...");
-    return listarTarefasHojeNotion(ctx.chatId, ctx.msgId);
   }
   if (data === "rotina_briefing") {
     responderCallbackTelegram(cb.id, "Gerando briefing matinal...");
@@ -61370,7 +60920,7 @@ function tratarCallbackRotinaProdutividade_(cb, data, ctx) {
   }
   if (data === "rotina_duvida") {
     responderCallbackTelegram(cb.id, "MedQuest / Dúvidas");
-    var msgDuvidaLegacy = "🧠 *MEDQUEST / DÚVIDAS MÉDICAS*\n\nEnvie sua dúvida médica digitando:\n`/duvida <sua dúvida>`\n💡 *Exemplo:* `/duvida Critérios de Light para derrame pleural`\n\nSua dúvida será salva no Notion para o bloco noturno de estudo ativo.";
+    var msgDuvidaLegacy = "🧠 *MEDQUEST / DÚVIDAS MÉDICAS*\n\nEnvie sua dúvida médica digitando:\n`/duvida <sua dúvida>`\n💡 *Exemplo:* `/duvida Critérios de Light para derrame pleural`\n\nSua dúvida será salva no banco local para o bloco noturno de estudo ativo.";
     var kbDuvidaLegacy = {
       inline_keyboard: [
         [{ text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" }, { text: "🏠 Início", callback_data: "ux:hub:inicio" }]
@@ -61543,70 +61093,6 @@ function tratarCallbackCalculadoras_(cb, data, ctx) {
     return true;
   }
   return false;
-}
-
-/**
- * E. ARQUIVAMENTO NO NOTION TASKS
- */
-function tratarCallbackNotionTasks_(cb, data, ctx) {
-  if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(ctx.chatId)) {
-    responderCallbackTelegram(cb.id, "🔒 O banco do Notion é exclusivo do titular.", true);
-    return true;
-  }
-  var partes = data.split("_");
-  var tipo = partes[1];
-  var cacheKey = partes.slice(2).join("_");
-
-  var cache = CacheService.getScriptCache();
-  var conteudo = cache.get(cacheKey);
-
-  if (cache.get("saved_" + cacheKey)) {
-    responderCallbackTelegram(cb.id, "Já salvo no Notion.");
-    return true;
-  }
-  if (conteudo) {
-    responderCallbackTelegram(cb.id, "Arquivando no Notion...");
-    var mapaTitulos = {
-      "soap": "Caso Clínico SOAP",
-      "rx": "Prescrição Ambulatorial",
-      "plantao": "Passagem de Plantão SBAR",
-      "round": "Pitch & Round Socrático",
-      "gaso": "Gasometria Arterial",
-      "conduta": "Conduta de Emergência",
-      "audio": "Registro Clínico por Áudio",
-      "imagem": "Análise de Imagem/ECG",
-      "calc": "Calculadora Clínica",
-      "interacao": "Análise de Interação Medicamentosa"
-    };
-    var tituloNotion = mapaTitulos[tipo] || "Anotação Clínica";
-    tituloNotion += " · " + Utilities.formatDate(new Date(), ctx.tz, "dd/MM HH:mm");
-
-    var sucesso = (typeof criarTarefaNotion === "function")
-      ? criarTarefaNotion(tituloNotion, "Internship", "2 · Important", conteudo)
-      : false;
-
-    if (sucesso) {
-      enviarMensagemParaChat(ctx.chatId, "📁 Arquivado no Notion Tasks com sucesso!");
-      var kbRestante = cb.message && cb.message.reply_markup && cb.message.reply_markup.inline_keyboard;
-      if (kbRestante) {
-        kbRestante = kbRestante.map(function(row) {
-          return row.filter(function(b) { return b.callback_data !== data; });
-        }).filter(function(row) { return row.length; });
-        executarPostTelegram("https://api.telegram.org/bot" + ConfigService.get("TELEGRAM_BOT_TOKEN") + "/editMessageReplyMarkup", {
-          chat_id: ctx.chatId,
-          message_id: ctx.msgId,
-          reply_markup: { inline_keyboard: kbRestante }
-        });
-      }
-      safePutCache(cache, "saved_" + cacheKey, "1", 21600);
-    } else {
-      enviarMensagemParaChat(ctx.chatId, "❌ Falha ao salvar no Notion. Tente novamente.");
-    }
-  } else {
-    responderCallbackTelegram(cb.id, "⚠️ Conteúdo expirado.");
-    if (typeof removerBotaoInline === "function") removerBotaoInline(cb);
-  }
-  return true;
 }
 
 /**
@@ -62188,7 +61674,6 @@ function tratarCallbackExamesFisicos_(cb, data, ctx) {
 var MAPA_CALLBACKS_EXATOS_ = {
   // Rotina e Produtividade
   "rotina_agenda": tratarCallbackRotinaProdutividade_,
-  "rotina_tasks": tratarCallbackRotinaProdutividade_,
   "rotina_briefing": tratarCallbackRotinaProdutividade_,
   "rotina_checkin": tratarCallbackRotinaProdutividade_,
   "rotina_semana": tratarCallbackRotinaProdutividade_,
@@ -62284,14 +61769,6 @@ var ROTEADORES_PREFIXO_CALLBACKS_ = [
   { prefix: "habit_", handler: tratarCallbackHabitoEEnergia_ },
   { prefix: "energy_", handler: tratarCallbackHabitoEEnergia_ },
   { prefix: "duvida:", handler: tratarCallbackDuvidasMedQuest_ },
-  { prefix: "sniper:", handler: function(cb, data, ctx) {
-      if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(ctx.chatId)) {
-        responderCallbackTelegram(cb.id, "🔒 O Sniper de Plantões é exclusivo do titular.", true);
-        return true;
-      }
-      return (typeof tratarCallbackSniperPlantoes === "function") ? tratarCallbackSniperPlantoes(cb, data, ctx) : false;
-    }
-  },
   { prefix: "rotina:", handler: function(cb, data, ctx) {
       if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(ctx.chatId)) {
         responderCallbackTelegram(cb.id, "🔒 A rotina e timeline adaptativa são exclusivas do titular.", true);
@@ -62308,7 +61785,6 @@ var ROTEADORES_PREFIXO_CALLBACKS_ = [
   { prefix: "calc_cat_", handler: tratarCallbackCalculadoras_ },
   { prefix: "calc:", handler: tratarCallbackCalculadoras_ },
   { prefix: "calc_", handler: tratarCallbackCalculadoras_ },
-  { prefix: "salvarNotion_", handler: tratarCallbackNotionTasks_ },
   { prefix: "gerarPdfRx_", handler: tratarCallbackPrescricaoEFarmaco_ },
   { prefix: "rx_med:", handler: tratarCallbackPrescricaoEFarmaco_ },
   { prefix: "ped_med:", handler: tratarCallbackPrescricaoEFarmaco_ },
@@ -62607,7 +62083,7 @@ function processarMensagemVoz(message) {
         } else {
           safePutCache(contextoCache, contextoKey, casoAudio, 900);
         }
-        return responderPreceptorVozComIA(chatId, casoAudio);
+        return responderPreceptorVozComIA(chatId, casoAudio, { ehAudio: true });
       }
 
       // 1. DITADO DE CORREDOR: Se for evolução de leito em tempo único:
@@ -64430,8 +63906,7 @@ function obterCatalogoComandosSlash(chatId) {
         { cmd: "/menu", aliases: ["/menu"], sintaxe: "/menu", desc: "Central de Comandos e teclado rápido beira-leito." },
         { cmd: "/ajuda", aliases: ["/ajuda"], sintaxe: "/ajuda [filtro]", desc: "Manual resumido de comandos com busca por especialidade." },
         { cmd: "/novo", aliases: ["/novo"], sintaxe: "/novo", desc: "Limpa a memória do caso e reseta o contexto clínico." },
-        { cmd: "/status", aliases: ["/status"], sintaxe: "/status", desc: "Status operacional dos servidores, REMUME e APIs." },
-        { cmd: "/pc", aliases: ["/pc"], sintaxe: "/pc [sync|audit|status]", desc: "Envia ordens para o runner local do computador." }
+        { cmd: "/status", aliases: ["/status"], sintaxe: "/status", desc: "Status operacional dos servidores, REMUME e APIs." }
       ]
     },
     {
@@ -64853,8 +64328,8 @@ function enviarManualCompletoComandos(chatId, filtro, messageId) {
 
   // Bloqueio explícito de ajuda sobre rotina e agenda pessoal para convidados
   if (typeof ehUsuarioTitular === "function" && chatId && !ehUsuarioTitular(chatId)) {
-    if (filtroNorm === "rotina" || filtroNorm === "agenda" || filtroNorm === "habitos" || filtroNorm === "task" || filtroNorm === "tarefa" || filtroNorm === "tasks" || filtroNorm === "briefing" || filtroNorm === "checkin") {
-      var msgRestrita = "🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Notion, Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use a Central de Ajuda para explorar calculadoras, condutas e protocolos clínicos.";
+    if (filtroNorm === "rotina" || filtroNorm === "agenda" || filtroNorm === "habitos" || filtroNorm === "briefing" || filtroNorm === "checkin") {
+      var msgRestrita = "🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use a Central de Ajuda para explorar calculadoras, condutas e protocolos clínicos.";
       var kbRestrito = {
         inline_keyboard: [
           [{ text: "🔙 Central de Ajuda", callback_data: "ux:ajuda:menu" }, { text: "🏠 Início", callback_data: "ux:hub:inicio" }]
@@ -64952,7 +64427,7 @@ function enviarManualCompletoComandos(chatId, filtro, messageId) {
       "monkeypox": "mpox", "neuro": "ef", "pqu": "ef", "ortopo": "ef",
       "reumato": "ef", "orl": "ef", "exame": "ef", "exames": "ef", "semiologia": "ef",
       "sbar": "plantao", "pitch": "round", "sabatina": "voz",
-      "tarefa": "task", "relatorio": "semana",
+      "relatorio": "semana",
       "obstetricia": "go", "gineco": "go"
     };
     if (sinonimosBusca[cmdBusca]) {
@@ -65682,56 +65157,13 @@ function tratarComandoDhe(chatId, dadosDhe) {
 
 /**
  * ==============================================================================
- * ULTRA ROTINA · TELEGRAM MINI APP (WEBAPP) & INLINE MODE
+ * ULTRA ROTINA · TELEGRAM MINI APP (WEBAPP)
  * ==============================================================================
- * 1. Resposta instantânea (<50ms) a consultas em linha (@UltraRotinaBot [busca])
- *    em qualquer chat, grupo de plantão ou mensagem privada do Telegram.
- * 2. Integração bidirecional com Telegram Mini App (Cockpit PWA):
- *    - Configuração de Chat Menu Button com WebApp em tela cheia.
- *    - Processamento de web_app_data enviados pelo Cockpit para o chat.
+ * Integração bidirecional com Telegram Mini App (Cockpit PWA):
+ * - Configuração de Chat Menu Button com WebApp em tela cheia.
+ * - Processamento de web_app_data enviados pelo Cockpit para o chat.
  * ==============================================================================
  */
-
-/**
- * Envia o resultado estruturado da busca inline para a API do Telegram.
- * @param {string} inlineQueryId - ID único da consulta inline recebida.
- * @param {Array<Object>} results - Vetor de InlineQueryResultArticle.
- * @param {number} [cacheTime=30] - Tempo de cache em segundos no cliente Telegram.
- * @returns {boolean} Sucesso da chamada HTTP.
- */
-function responderInlineQueryTelegram(inlineQueryId, results, cacheTime) {
-  if (!inlineQueryId || !Array.isArray(results)) return false;
-  var token = (typeof ConfigService !== "undefined" && ConfigService.get)
-    ? ConfigService.get("TELEGRAM_BOT_TOKEN")
-    : null;
-  if (!token) return false;
-
-  var payload = {
-    inline_query_id: String(inlineQueryId),
-    results: results.slice(0, 20), // Telegram limita a 50 itens por resposta
-    cache_time: typeof cacheTime === "number" ? cacheTime : 30,
-    is_personal: true
-  };
-
-  var url = "https://api.telegram.org/bot" + token + "/answerInlineQuery";
-  if (typeof executarPostTelegram === "function") {
-    return executarPostTelegram(url, payload);
-  }
-
-  var options = {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-  try {
-    var res = UrlFetchApp.fetch(url, options);
-    return res.getResponseCode() === 200;
-  } catch (err) {
-    Logger.log("Erro ao responder inline query: " + err.message);
-    return false;
-  }
-}
 
 /**
  * Configura o botão fixo de menu do chat do Telegram (ao lado do teclado)
@@ -65782,375 +65214,6 @@ function configurarMenuButtonTelegram(chatId) {
 }
 
 /**
- * Cria a estrutura padronizada de um artigo InlineQueryResultArticle.
- * @param {string} id - Identificador único do card.
- * @param {string} titulo - Título em destaque do card.
- * @param {string} descricao - Subtítulo / resumo rápido beira-leito.
- * @param {string} mensagemHtml - Mensagem médica completa enviada no chat ao tocar no card.
- * @param {string} [urlApp] - URL opcional do Mini App para botão de ação.
- * @returns {Object} Objeto do tipo InlineQueryResultArticle.
- */
-function criarArtigoInline_(id, titulo, descricao, mensagemHtml, urlApp) {
-  var urlCockpit = urlApp || ((typeof obterUrlCockpit === "function") ? obterUrlCockpit() : "https://wagmms.github.io/cockpit/");
-  var artigo = {
-    type: "article",
-    id: String(id),
-    title: titulo,
-    description: descricao,
-    input_message_content: {
-      message_text: mensagemHtml,
-      parse_mode: "HTML"
-    },
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: "📱 Abrir no Cockpit", web_app: { url: urlCockpit } }
-        ]
-      ]
-    }
-  };
-  return artigo;
-}
-
-/**
- * Construtores de Artigos Clínicos Especializados para Busca Inline
- */
-
-function _inlineCardNora(pesoInformado) {
-  var peso = (typeof pesoInformado === "number" && pesoInformado > 0) ? pesoInformado : 70;
-  // Diluição padrão: 4 amp (16mg = 16.000 mcg) em 234 mL SG5% = 64 mcg/mL
-  // mL/h = (mcg/kg/min * peso * 60) / 64
-  var v005 = ((0.05 * peso * 60) / 64).toFixed(1);
-  var v01 = ((0.1 * peso * 60) / 64).toFixed(1);
-  var v02 = ((0.2 * peso * 60) / 64).toFixed(1);
-  var v05 = ((0.5 * peso * 60) / 64).toFixed(1);
-  var v10 = ((1.0 * peso * 60) / 64).toFixed(1);
-
-  var html = "💉 <b>NORADRENALINA (HEMITARTARATO) — GUIA RÁPIDO DVA</b>\n" +
-    "───────────────────────────\n" +
-    "⚖️ <b>Peso de Referência:</b> " + peso + " kg\n" +
-    "🎯 <b>Alvo Terapêutico:</b> PAM ≥ 65 mmHg (Choque Séptico / Vasoplégico)\n\n" +
-    "🧪 <b>Solução Padrão (64 mcg/mL):</b>\n" +
-    "• 4 ampolas (16 mg = 16 mL) + 234 mL SG 5% (Vol. Final 250 mL)\n\n" +
-    "📊 <b>Guia de Vazão em BIC (mL/h):</b>\n" +
-    "• 0,05 mcg/kg/min (inicial): <b>" + v005 + " mL/h</b>\n" +
-    "• 0,10 mcg/kg/min (usual): <b>" + v01 + " mL/h</b>\n" +
-    "• 0,20 mcg/kg/min (moderada): <b>" + v02 + " mL/h</b>\n" +
-    "• 0,50 mcg/kg/min (elevada): <b>" + v05 + " mL/h</b>\n" +
-    "• 1,00 mcg/kg/min (refratária): <b>" + v10 + " mL/h</b>\n\n" +
-    "⚠️ <b>Salvaguardas de Segurança:</b>\n" +
-    "• Acesso venoso central exclusivo (CVC) sempre que viável.\n" +
-    "• Se periférico transitório: veia calibrosa antecubital, vigiar extravasamento (antídoto: Fentolamina).\n" +
-    "• Em doses > 0,25 mcg/kg/min: associar Vasopressina 0,03 UI/min.";
-
-  return criarArtigoInline_(
-    "dva_nora_" + peso,
-    "💉 Noradrenalina (DVA) — " + peso + " kg",
-    "0,05 a 2 mcg/kg/min. Padrão 4 amp/234 mL SG5% (64 mcg/mL). PAM ≥ 65 mmHg.",
-    html
-  );
-}
-
-function _inlineCardVaso() {
-  var html = "💉 <b>VASOPRESSINA — GUIA RÁPIDO DVA</b>\n" +
-    "───────────────────────────\n" +
-    "🎯 <b>Indicação:</b> Choque séptico refratário a doses moderadas de Noradrenalina (poupador de catecolamina)\n\n" +
-    "🧪 <b>Preparo Padrão (0,2 UI/mL):</b>\n" +
-    "• 1 ampola (20 UI = 1 mL) + 99 mL SG 5% ou SF 0,9% (Vol. Final 100 mL)\n\n" +
-    "📊 <b>Dose Fixa Recomendada:</b>\n" +
-    "• <b>0,03 UI/min</b> em BIC contínua (infusão fixa de <b>9,0 mL/h</b>)\n" +
-    "• Faixa permitida: 0,01 a 0,04 UI/min (3 a 12 mL/h)\n\n" +
-    "⚠️ <b>Regras de Ouro:</b>\n" +
-    "• NÃO titular como a Noradrenalina; manter infusão fixa em BIC.\n" +
-    "• Desmame: iniciar o desmame da Vasopressina apenas após o desmame completo ou avançado da Noradrenalina.";
-
-  return criarArtigoInline_(
-    "dva_vaso",
-    "💉 Vasopressina — 0,01 a 0,04 UI/min",
-    "Dose fixa em BIC (usual 0,03 UI/min = 9 mL/h). 1 amp/99 mL SG5% (0,2 UI/mL).",
-    html
-  );
-}
-
-function _inlineCardDobuta(pesoInformado) {
-  var peso = (typeof pesoInformado === "number" && pesoInformado > 0) ? pesoInformado : 70;
-  // Diluição padrão: 1 amp (250 mg = 250.000 mcg) em 230 mL SG5% = 1.000 mcg/mL
-  // mL/h = (mcg/kg/min * peso * 60) / 1000
-  var v25 = ((2.5 * peso * 60) / 1000).toFixed(1);
-  var v5 = ((5.0 * peso * 60) / 1000).toFixed(1);
-  var v10 = ((10.0 * peso * 60) / 1000).toFixed(1);
-  var v15 = ((15.0 * peso * 60) / 1000).toFixed(1);
-  var v20 = ((20.0 * peso * 60) / 1000).toFixed(1);
-
-  var html = "💉 <b>DOBUTAMINA — GUIA INOTRÓPICO</b>\n" +
-    "───────────────────────────\n" +
-    "⚖️ <b>Peso de Referência:</b> " + peso + " kg\n" +
-    "🎯 <b>Indicação:</b> Choque cardiogênico ou disfunção miocárdica com má perfusão periférica (ScvO2 &lt; 70%)\n\n" +
-    "🧪 <b>Preparo Padrão (1.000 mcg/mL):</b>\n" +
-    "• 1 ampola (250 mg = 20 mL) + 230 mL SG 5% (Vol. Final 250 mL)\n\n" +
-    "📊 <b>Vazão em BIC (mL/h):</b>\n" +
-    "• 2,5 mcg/kg/min (início suave): <b>" + v25 + " mL/h</b>\n" +
-    "• 5,0 mcg/kg/min (dose usual): <b>" + v5 + " mL/h</b>\n" +
-    "• 10,0 mcg/kg/min (inotrópico pleno): <b>" + v10 + " mL/h</b>\n" +
-    "• 15,0 mcg/kg/min (elevada): <b>" + v15 + " mL/h</b>\n" +
-    "• 20,0 mcg/kg/min (dose máxima): <b>" + v20 + " mL/h</b>\n\n" +
-    "⚠️ <b>Vigilância:</b> Pode provocar taquiarritmias e vasodilatação periférica (queda de PAM).";
-
-  return criarArtigoInline_(
-    "dva_dobuta_" + peso,
-    "💉 Dobutamina (Inotrópico) — " + peso + " kg",
-    "2 a 20 mcg/kg/min. Padrão 1 amp/230 mL SG5% (1.000 mcg/mL). ScvO2 e perfusão.",
-    html
-  );
-}
-
-function _inlineCardSri(pesoInformado) {
-  var peso = (typeof pesoInformado === "number" && pesoInformado > 0) ? pesoInformado : 70;
-  // Doses SRI
-  var etoMg = (0.3 * peso).toFixed(0);
-  var etoMl = (0.3 * peso / 2).toFixed(1); // 2 mg/mL
-  var quetMg = (1.5 * peso).toFixed(0);
-  var quetMl = (1.5 * peso / 50).toFixed(1); // 50 mg/mL
-  var succMg = (1.0 * peso).toFixed(0);
-  var rocurMg = (1.2 * peso).toFixed(0);
-  var rocurMl = (1.2 * peso / 10).toFixed(1); // 10 mg/mL
-  var fentMcg = (2.0 * peso).toFixed(0);
-  var fentMl = (2.0 * peso / 50).toFixed(1); // 50 mcg/mL
-
-  var html = "🫁 <b>SEQUÊNCIA RÁPIDA DE INTUBAÇÃO (SRI / IOT)</b>\n" +
-    "───────────────────────────\n" +
-    "⚖️ <b>Peso:</b> " + peso + " kg\n\n" +
-    "1️⃣ <b>Pré-Tratamento / Analgesia:</b>\n" +
-    "• Fentanil (50 mcg/mL): <b>" + fentMcg + " mcg (" + fentMl + " mL)</b> IV lento (se cardiopatia/AVE)\n\n" +
-    "2️⃣ <b>Indução / Hipnótico (Escolher 1):</b>\n" +
-    "• <b>Etomidato (2 mg/mL):</b> 0,3 mg/kg = <b>" + etoMg + " mg (" + etoMl + " mL)</b> — <i>Estabilidade hemodinâmica</i>\n" +
-    "• <b>Quetamina (50 mg/mL):</b> 1,5 mg/kg = <b>" + quetMg + " mg (" + quetMl + " mL)</b> — <i>Broncoespasmo / Choque</i>\n\n" +
-    "3️⃣ <b>Bloqueio Neuromuscular (Escolher 1):</b>\n" +
-    "• <b>Succinilcolina (pó 100mg):</b> 1,0 mg/kg = <b>" + succMg + " mg</b> IV (Contraindicado em K+ elevado, queimados &gt;72h)\n" +
-    "• <b>Rocurônio (10 mg/mL):</b> 1,2 mg/kg = <b>" + rocurMg + " mg (" + rocurMl + " mL)</b> IV — <i>Paralisia em 60s</i>\n\n" +
-    "📏 <b>Tubo Traqueal (TOT):</b>\n" +
-    "• Homem: 7,5 a 8,5 mm (Fixação: ~22-23 cm na rima labial)\n" +
-    "• Mulher: 7,0 a 7,5 mm (Fixação: ~21-22 cm na rima labial)";
-
-  return criarArtigoInline_(
-    "sri_" + peso,
-    "🫁 Intubação em Sequência Rápida (SRI) — " + peso + " kg",
-    "Etomidato (" + etoMl + " mL), Quetamina (" + quetMl + " mL), Rocurônio (" + rocurMl + " mL), Succinilcolina.",
-    html
-  );
-}
-
-function _inlineCardCurb65() {
-  var html = "🫁 <b>ESCORE CURB-65 — PNEUMONIA ADQUIRIDA NA COMUNIDADE</b>\n" +
-    "───────────────────────────\n" +
-    "📋 <b>Critérios de Pontuação (1 ponto cada):</b>\n" +
-    "• <b>C (Confusão mental):</b> Desorientação no tempo/espaço/pessoa\n" +
-    "• <b>U (Ureia &gt; 50 mg/dL):</b> Ou BUN &gt; 19 mg/dL\n" +
-    "• <b>R (Frequência Respiratória):</b> ≥ 30 irpm\n" +
-    "• <b>B (Pressão Arterial):</b> PAS &lt; 90 mmHg ou PAD ≤ 60 mmHg\n" +
-    "• <b>65 (Idade):</b> ≥ 65 anos\n\n" +
-    "📊 <b>Estratificação & Conduta:</b>\n" +
-    "• <b>0 a 1 ponto:</b> Baixo risco (mortalidade &lt; 1,5%). Tratamento <b>Ambulatorial</b> (Amoxicilina + Clavulanato ou Macrolídeo).\n" +
-    "• <b>2 pontos:</b> Risco intermediário (mortalidade ~9%). Considerar <b>Internação em Enfermaria</b>.\n" +
-    "• <b>≥ 3 pontos:</b> Alto risco (mortalidade &gt; 20%). Internação hospitalar mandatória; avaliar <b>UTI se ≥ 4 pontos</b>.";
-
-  return criarArtigoInline_(
-    "calc_curb65",
-    "🫁 CURB-65 — Gravidade da Pneumonia (PAC)",
-    "Confusão, Ureia > 50, FR ≥ 30, PA < 90/60, Idade ≥ 65. Conduta: Ambulatório vs Enfermaria vs UTI.",
-    html
-  );
-}
-
-function _inlineCardWellsTep() {
-  var html = "🫀 <b>ESCORE DE WELLS — TROMBOEMBOLISMO PULMONAR (TEP)</b>\n" +
-    "───────────────────────────\n" +
-    "📋 <b>Critérios e Pontuação:</b>\n" +
-    "• Sinais/sintomas clínicos de TVP: <b>+3,0</b>\n" +
-    "• Diagnóstico alternativo menos provável que TEP: <b>+3,0</b>\n" +
-    "• FC &gt; 100 bpm: <b>+1,5</b>\n" +
-    "• Imobilização ≥ 3 dias ou cirurgia recente (&lt; 4 semanas): <b>+1,5</b>\n" +
-    "• TEP ou TVP prévio: <b>+1,5</b>\n" +
-    "• Hemoptise: <b>+1,0</b>\n" +
-    "• Câncer ativo (tratamento em 6 meses ou paliativo): <b>+1,0</b>\n\n" +
-    "🎯 <b>Conduta Baseada na Probabilidade:</b>\n" +
-    "• <b>Improvável (≤ 4 pontos):</b> Dosar <b>D-Dímero</b> (alta sensibilidade). Se normal, afasta TEP sem TC.\n" +
-    "• <b>Provável (&gt; 4 pontos):</b> Solicitar <b>Angio-TC de Tórax</b> direta (dispensa D-Dímero inicial).";
-
-  return criarArtigoInline_(
-    "calc_wells_tep",
-    "🫀 Wells TEP — Probabilidade de Tromboembolismo",
-    "Escore de Wells (ESC/SBPT). ≤4: D-dímero; >4: Angio-TC de tórax imediata.",
-    html
-  );
-}
-
-function _inlineCardGaso() {
-  var html = "🧪 <b>GASOMETRIA ARTERIAL — ROTEIRO DE ANÁLISE EM 4 PASSOS</b>\n" +
-    "───────────────────────────\n" +
-    "1️⃣ <b>Valores de Referência Canônicos:</b>\n" +
-    "• pH: 7,35 a 7,45 | pCO2: 35 a 45 mmHg | HCO3: 22 a 26 mEq/L | BE: -2 a +2\n\n" +
-    "2️⃣ <b>Distúrbio Primário:</b>\n" +
-    "• pH &lt; 7,35: Acidose (se HCO3 &lt; 22 = Metabólica; se pCO2 &gt; 45 = Respiratória)\n" +
-    "• pH &gt; 7,45: Alcalose (se HCO3 &gt; 26 = Metabólica; se pCO2 &lt; 35 = Respiratória)\n\n" +
-    "3️⃣ <b>Compensação Respiratória (Fórmula de Winter):</b>\n" +
-    "• <i>Na Acidose Metabólica:</i> <b>pCO2 esperado = (1,5 × HCO3) + 8 ± 2</b>\n" +
-    "• Se pCO2 medido &gt; esperado: Acidose Respiratória concomitante associada!\n" +
-    "• Se pCO2 medido &lt; esperado: Alcalose Respiratória concomitante associada!\n\n" +
-    "4️⃣ <b>Anion Gap (AG) e Relação Delta/Delta:</b>\n" +
-    "• <b>AG = Na - (Cl + HCO3)</b> (Normal: 8 a 12 mEq/L)\n" +
-    "• Na acidose metabólica com AG elevado: calcular Delta AG / Delta HCO3 (0,8 a 1,2).";
-
-  return criarArtigoInline_(
-    "calc_gaso",
-    "🧪 Gasometria Arterial — Análise Ácido-Base em 4 Passos",
-    "pH, pCO2, HCO3, Fórmula de Winter (pCO2 = 1.5xHCO3 + 8 ± 2) e Anion Gap.",
-    html
-  );
-}
-
-function _inlineCardGlasgow() {
-  var html = "🧠 <b>ESCALA DE COMA DE GLASGOW COM REATIVIDADE PUPILAR (GCS-P)</b>\n" +
-    "───────────────────────────\n" +
-    "👁️ <b>Abertura Ocular (1-4):</b>\n" +
-    "• 4: Espontânea | 3: Ao som | 2: À pressão | 1: Ausente\n\n" +
-    "🗣️ <b>Resposta Verbal (1-5):</b>\n" +
-    "• 5: Orientada | 4: Confusa | 3: Palavras inapropriadas | 2: Sons ininteligíveis | 1: Ausente\n\n" +
-    "💪 <b>Resposta Motora (1-6):</b>\n" +
-    "• 6: À ordem | 5: Localiza dor | 4: Flexão normal | 3: Decorticação | 2: Descerebração | 1: Ausente\n\n" +
-    "🔦 <b>Avaliação Pupilar (GCS-P = Pontuação - Pupilas não-reativas):</b>\n" +
-    "• 2 pupilas reativas: -0 ponto\n" +
-    "• 1 pupila não-reativa: -1 ponto\n" +
-    "• Nenhuma pupila reativa: -2 pontos\n\n" +
-    "⚠️ <b>Alerta de IOT:</b> Glasgow ≤ 8 ou perda de reflexos de via aérea indica intubação imediata.";
-
-  return criarArtigoInline_(
-    "calc_glasgow",
-    "🧠 Glasgow-P (GCS-P) — Avaliação Neurológica",
-    "Abertura Ocular (1-4), Verbal (1-5), Motora (1-6) e Pupilas (-0 a -2). Alerta IOT ≤ 8.",
-    html
-  );
-}
-
-function _inlineCardCockpitApp(chatId) {
-  var urlApp = (typeof obterUrlCockpit === "function") ? obterUrlCockpit(chatId) : "https://wagmms.github.io/cockpit/";
-  var html = "📱 <b>COCKPIT CLÍNICO ULTRA ROTINA (MINI APP PWA)</b>\n" +
-    "───────────────────────────\n" +
-    "Painel integrado de alta performance com 6 módulos essenciais:\n\n" +
-    "• 🚨 <b>Sala Vermelha & DVA:</b> Doses em tempo real e compatibilidade em Y\n" +
-    "• 🛏️ <b>Enfermaria & Leitos:</b> Gestão de censo e passagem de plantão SBAR\n" +
-    "• 💊 <b>Guia Farmacêutico & REMUME:</b> Catálogo posológico completo\n" +
-    "• 🧮 <b>Calculadoras Clínicas:</b> CrCl, Gasometria, SRI, Parkland e DHE\n" +
-    "• 📋 <b>Evolução SOAP:</b> Preceptor socrático e nota de prontuário em 1 toque\n\n" +
-    "<i>Toque no botão abaixo para abrir a ferramenta em tela cheia no Telegram.</i>";
-
-  return criarArtigoInline_(
-    "app_cockpit_mini",
-    "📱 Abrir Cockpit Clínico em Tela Cheia (Telegram Mini App)",
-    "6 abas: Sala Vermelha, DVA, Leitos SBAR, REMUME, Cálculos e SOAP.",
-    html,
-    urlApp
-  );
-}
-
-/**
- * Monta os artigos de resposta da query inline de forma determinística e ultrarrápida (<5ms).
- * @param {string} queryTexto - Texto pesquisado pelo usuário.
- * @param {string|number} [chatId] - Chat ID para montagem de links autenticados.
- * @returns {Array<Object>} Lista de artigos para o Telegram.
- */
-function montarResultadosInlineClinicos(queryTexto, chatId) {
-  var termo = String(queryTexto || "").trim().toLowerCase();
-  var resultados = [];
-
-  // 1. Extração de peso opcional (ex: "nora 80", "sri 65", "dobuta 75")
-  var matchPeso = termo.match(/(\d+(?:[.,]\d+)?)\s*k?g?/);
-  var pesoNum = matchPeso ? parseFloat(matchPeso[1].replace(",", ".")) : null;
-  if (pesoNum && (pesoNum < 1 || pesoNum > 300)) pesoNum = null;
-
-  // 2. Roteamento por termo específico
-  if (/^(?:nora|noradrenalina)/i.test(termo)) {
-    resultados.push(_inlineCardNora(pesoNum || 70));
-    resultados.push(_inlineCardVaso());
-    resultados.push(_inlineCardDobuta(pesoNum || 70));
-    resultados.push(_inlineCardSri(pesoNum || 70));
-  } else if (/^(?:vaso|vasopressina)/i.test(termo)) {
-    resultados.push(_inlineCardVaso());
-    resultados.push(_inlineCardNora(pesoNum || 70));
-  } else if (/^(?:dobuta|dobutamina)/i.test(termo)) {
-    resultados.push(_inlineCardDobuta(pesoNum || 70));
-    resultados.push(_inlineCardNora(pesoNum || 70));
-  } else if (/^(?:sri|iot|intuba)/i.test(termo)) {
-    resultados.push(_inlineCardSri(pesoNum || 70));
-    resultados.push(_inlineCardNora(pesoNum || 70));
-    resultados.push(_inlineCardGlasgow());
-  } else if (/^(?:curb|curb65|curb-65|pac)/i.test(termo)) {
-    resultados.push(_inlineCardCurb65());
-    resultados.push(_inlineCardGaso());
-  } else if (/^(?:wells|tep|tvp)/i.test(termo)) {
-    resultados.push(_inlineCardWellsTep());
-  } else if (/^(?:gaso|gasometria|winter|acido)/i.test(termo)) {
-    resultados.push(_inlineCardGaso());
-  } else if (/^(?:glasgow|gcs)/i.test(termo)) {
-    resultados.push(_inlineCardGlasgow());
-    resultados.push(_inlineCardSri(pesoNum || 70));
-  } else if (/^(?:app|cockpit|painel|menu)/i.test(termo)) {
-    resultados.push(_inlineCardCockpitApp(chatId));
-  } else if (termo.length >= 3) {
-    // 3. Busca de Medicamentos no Guia Farmacêutico Local (HSL)
-    try {
-      if (typeof buscarMedicamentoNoHSL === "function") {
-        var med = buscarMedicamentoNoHSL(termo);
-        if (med) {
-          var nomeMed = med.nome_comum || med.nome_normalizado || termo.toUpperCase();
-          var descMed = (med.indicacoes || med.via || "Guia Farmacêutico").slice(0, 100);
-          var htmlMed = "💊 <b>" + (med.nome_comum || nomeMed).toUpperCase() + "</b>\n" +
-            "───────────────────────────\n" +
-            "• <b>Princípio Ativo:</b> " + (med.principio_ativo || nomeMed) + "\n" +
-            "• <b>Via de Administração:</b> " + (med.via || "Ver prescrição") + "\n" +
-            "• <b>Posologia Adulto:</b> " + (med.dose_adulto || "Conforme protocolo clínico") + "\n" +
-            (med.ajuste_renal ? ("• <b>Ajuste Renal:</b> " + med.ajuste_renal + "\n") : "") +
-            (med.alertas ? ("⚠️ <b>Alertas:</b> " + med.alertas + "\n") : "");
-
-          resultados.push(criarArtigoInline_("med_" + encodeURIComponent(nomeMed), "💊 " + nomeMed, descMed, htmlMed));
-        }
-      }
-    } catch (_) {}
-  }
-
-  // 4. Se a query estiver vazia ou com poucos resultados, compõe a grade clínica canônica padrão
-  if (resultados.length === 0) {
-    resultados.push(_inlineCardNora(pesoNum || 70));
-    resultados.push(_inlineCardVaso());
-    resultados.push(_inlineCardDobuta(pesoNum || 70));
-    resultados.push(_inlineCardSri(pesoNum || 70));
-    resultados.push(_inlineCardCurb65());
-    resultados.push(_inlineCardWellsTep());
-    resultados.push(_inlineCardGaso());
-    resultados.push(_inlineCardGlasgow());
-    resultados.push(_inlineCardCockpitApp(chatId));
-  } else {
-    // Garante que o atalho do Cockpit esteja sempre acessível ao final
-    resultados.push(_inlineCardCockpitApp(chatId));
-  }
-
-  return resultados;
-}
-
-/**
- * Ponto de entrada oficial para processamento de Inline Query do Telegram.
- * @param {Object} inlineQuery - Objeto inline_query recebido no update.
- * @returns {boolean}
- */
-function processarInlineQuery(inlineQuery) {
-  if (!inlineQuery || !inlineQuery.id) return false;
-  var queryTexto = inlineQuery.query || "";
-  var fromId = inlineQuery.from ? inlineQuery.from.id : null;
-  var resultados = montarResultadosInlineClinicos(queryTexto, fromId);
-  return responderInlineQueryTelegram(inlineQuery.id, resultados, 30);
-}
-
-/**
  * Ponto de entrada oficial para processamento de mensagens com web_app_data
  * originadas do Cockpit PWA (quando o médico clica em 'Enviar para o Chat').
  * @param {Object} message - Objeto message do Telegram com propriedade web_app_data.
@@ -66169,7 +65232,6 @@ function processarWebAppData(message) {
     return (typeof enviarMensagemParaChat === "function") ? enviarMensagemParaChat(chatId, txtSimples) : false;
   }
 
-  var tipo = payload.tipo || payload.acao || "registro";
   var titulo = payload.titulo || "Sincronização Cockpit PWA";
   var conteudo = payload.conteudo || payload.texto || payload.dados || "";
 
@@ -66216,9 +65278,6 @@ function processarWebAppData(message) {
 
 var TABELA_COMANDOS_ROTINA_PRODUTIVIDADE_ = {
   "/agenda": true,
-  "/task": true,
-  "/tarefa": true,
-  "/tasks": true,
   "/duvida": true,
   "/duvidas": true,
   "/semana": true,
@@ -66226,10 +65285,7 @@ var TABELA_COMANDOS_ROTINA_PRODUTIVIDADE_ = {
   "/habitos": true,
   "/checkin": true,
   "/briefing": true,
-  "/rotina": true,
-  "/sniper": true,
-  "/vagas": true,
-  "/piso": true
+  "/rotina": true
 };
 
 /**
@@ -66258,7 +65314,8 @@ function construirTecladoHubRotina() {
         {"text": "📊 Aderência Semanal", "callback_data": "rotina:aderencia"}
       ],
       [
-        {"text": "🎯 Sniper de Plantões (WhatsApp)", "callback_data": "sniper:painel"}
+        {"text": "🧠 Dúvidas Estudo", "callback_data": "ux:rotina:duvidas_lista"},
+        {"text": "🏁 Fim de Plantão", "callback_data": "rotina_plantao_fim"}
       ],
       [
         {"text": "🏠 Início", "callback_data": "ux:hub:inicio"}
@@ -66268,7 +65325,7 @@ function construirTecladoHubRotina() {
 }
 
 /**
- * Despachador modular de comandos de Rotina, Agenda, Notion e Ciclos Diários
+ * Despachador modular de comandos de Rotina, Agenda e Ciclos Diários
  */
 function despacharComandosRotinaEProdutividade(comando, texto, chatId, message) {
   if (!TABELA_COMANDOS_ROTINA_PRODUTIVIDADE_[comando]) {
@@ -66279,7 +65336,7 @@ function despacharComandosRotinaEProdutividade(comando, texto, chatId, message) 
   if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(chatId)) {
     return {
       tratado: true,
-      resultado: enviarMensagemParaChat(chatId, "🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Notion, Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use o /menu para acessar calculadoras, condutas, guias de diluição HSL e consultas clínicas.")
+      resultado: enviarMensagemParaChat(chatId, "🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use o /menu para acessar calculadoras, condutas, guias de diluição HSL e consultas clínicas.")
     };
   }
 
@@ -66288,26 +65345,6 @@ function despacharComandosRotinaEProdutividade(comando, texto, chatId, message) 
   if (comando === "/agenda") {
     var paramAgenda = (texto || "").replace(/^\/agenda\s*/i, "").trim();
     res = (typeof consultarEventosAgenda === "function") ? consultarEventosAgenda(paramAgenda, chatId) : false;
-  } else if (comando === "/sniper" || comando === "/vagas" || comando === "/piso") {
-    var argSniper = (comando === "/piso")
-      ? ("piso " + (texto || "").replace(/^\/piso\s*/i, "").trim())
-      : (texto || "").replace(/^\/(sniper|vagas)\s*/i, "").trim();
-    res = (typeof tratarComandoSniperPlantoes === "function") ? tratarComandoSniperPlantoes(chatId, argSniper) : false;
-  } else if (comando === "/task" || comando === "/tarefa") {
-    var tarefaTexto = (texto || "").replace(/^\/(task|tarefa)\s*/i, "").trim();
-    if (!tarefaTexto) {
-      res = enviarMensagemParaChat(chatId, "📋 Digite a tarefa a salvar no Inbox do Notion. Ex: `/task Revisar hemograma do leito 14`");
-    } else {
-      var okTask = (typeof criarTarefaNotion === "function") ? criarTarefaNotion(tarefaTexto, "Personal", "2 · Important", "Captura rápida via Telegram") : false;
-      if (okTask) {
-        res = enviarMensagemParaChat(chatId, "✅ *Tarefa salva no Inbox do Notion Tasks!*");
-      } else {
-        enviarMensagemParaChat(chatId, "❌ Falha ao salvar no Notion. O pedido foi preservado na fila local ou verifique o token.");
-        res = false;
-      }
-    }
-  } else if (comando === "/tasks") {
-    res = (typeof listarTarefasHojeNotion === "function") ? listarTarefasHojeNotion(chatId) : false;
   } else if (comando === "/duvidas") {
     res = (typeof listarDuvidasMedQuest === "function") ? listarDuvidasMedQuest(chatId) : false;
   } else if (comando === "/duvida") {
@@ -66315,8 +65352,8 @@ function despacharComandosRotinaEProdutividade(comando, texto, chatId, message) 
     if (!duvidaTexto || duvidaTexto.toLowerCase() === "listar") {
       res = (typeof listarDuvidasMedQuest === "function") ? listarDuvidasMedQuest(chatId) : false;
     } else {
-      var okDuvida = (typeof salvarDuvidaEstudoNotion === "function") ? salvarDuvidaEstudoNotion(duvidaTexto) : false;
-      if (okDuvida) {
+      var itemDuvida = (typeof salvarDuvidaEstudoLocal === "function") ? salvarDuvidaEstudoLocal(duvidaTexto) : null;
+      if (itemDuvida) {
         var kbDuv = {
           inline_keyboard: [
             [{ text: "📋 Ver Dúvidas Salvas", callback_data: "ux:rotina:duvidas_lista" }],
@@ -66648,6 +65685,123 @@ function tratarCallbackRotina(cb) {
   }
 }
 
+/**
+ * ==============================================================================
+ * BANCO LOCAL DE DÚVIDAS DE ESTUDO / MEDQUEST (PropertiesService)
+ * ==============================================================================
+ */
+var CHAVE_DUVIDAS_MEDQUEST_LOCAL_ = "duvidas_medquest_local";
+
+function obterDuvidasEstudoLocal() {
+  try {
+    var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+      ? PropertiesService.getScriptProperties()
+      : null;
+    if (!props) return [];
+    var raw = props.getProperty(CHAVE_DUVIDAS_MEDQUEST_LOCAL_);
+    if (!raw) return [];
+    var parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function salvarDuvidaEstudoLocal(texto) {
+  var textoLimpo = String(texto || "").trim();
+  if (!textoLimpo) return null;
+  var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+    ? PropertiesService.getScriptProperties()
+    : null;
+  var lista = obterDuvidasEstudoLocal();
+  var tz = (typeof ConfigService !== "undefined" && ConfigService.get)
+    ? ConfigService.get("TIMEZONE", "America/Sao_Paulo")
+    : "America/Sao_Paulo";
+  var dataISO = (typeof Utilities !== "undefined" && Utilities.formatDate)
+    ? Utilities.formatDate(new Date(), tz, "yyyy-MM-dd")
+    : new Date().toISOString().slice(0, 10);
+  var item = {
+    id: "duv_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+    texto: textoLimpo,
+    dataISO: dataISO,
+    resolvida: false,
+    criadaEm: new Date().toISOString()
+  };
+  lista.unshift(item);
+  if (lista.length > 100) lista = lista.slice(0, 100);
+  if (props) {
+    try {
+      props.setProperty(CHAVE_DUVIDAS_MEDQUEST_LOCAL_, JSON.stringify(lista));
+    } catch (_) {}
+  }
+  return item;
+}
+
+function marcarDuvidaEstudoResolvida(duvidaId) {
+  if (!duvidaId) return false;
+  var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+    ? PropertiesService.getScriptProperties()
+    : null;
+  var lista = obterDuvidasEstudoLocal();
+  var achou = false;
+  for (var i = 0; i < lista.length; i++) {
+    if (String(lista[i].id) === String(duvidaId)) {
+      lista[i].resolvida = true;
+      lista[i].resolvidaEm = new Date().toISOString();
+      achou = true;
+      break;
+    }
+  }
+  if (achou && props) {
+    try {
+      props.setProperty(CHAVE_DUVIDAS_MEDQUEST_LOCAL_, JSON.stringify(lista));
+    } catch (_) {}
+  }
+  return achou;
+}
+
+function listarDuvidasMedQuest(chatIdDestino, messageId) {
+  var destino = chatIdDestino || ((typeof ConfigService !== "undefined" && ConfigService.getPrimary)
+    ? ConfigService.getPrimary("TELEGRAM_CHAT_ID")
+    : "");
+  if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(destino)) {
+    return false;
+  }
+
+  var todas = obterDuvidasEstudoLocal();
+  var pendentes = todas.filter(function(d) { return d && !d.resolvida; });
+
+  var msg = "🧠 *BANCO LOCAL DE DÚVIDAS · MEDQUEST & ESTUDO ATIVO*\n\n";
+  var linhas = [];
+
+  if (pendentes.length === 0) {
+    msg += "✨ Nenhuma dúvida pendente no momento!\n\n" +
+      "💡 Para registrar uma nova dúvida durante o plantão, envie:\n`/duvida <sua dúvida clínica>`";
+  } else {
+    msg += "Você tem *" + pendentes.length + " dúvida(s) pendente(s)* para revisar no seu bloco de estudo:\n\n";
+    var exibidas = pendentes.slice(0, 8);
+    for (var i = 0; i < exibidas.length; i++) {
+      var d = exibidas[i];
+      var resumo = String(d.texto || "").replace(/[*_`]/g, "");
+      if (resumo.length > 90) resumo = resumo.slice(0, 87) + "...";
+      msg += (i + 1) + ") " + resumo + (d.dataISO ? " _(" + d.dataISO + ")_" : "") + "\n";
+      linhas.push([{ text: "✅ Resolver #" + (i + 1), callback_data: "duvida:check:" + d.id }]);
+    }
+  }
+
+  linhas.push([
+    { text: "🔄 Atualizar", callback_data: "ux:rotina:duvidas_lista" },
+    { text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" }
+  ]);
+  linhas.push([{ text: "🏠 Início", callback_data: "ux:hub:inicio" }]);
+
+  var kb = { inline_keyboard: linhas };
+  if (messageId && typeof enviarTelaBot === "function") {
+    return enviarTelaBot(destino, msg, kb, messageId);
+  }
+  return enviarMensagemComTecladoParaChat(destino, msg, kb);
+}
+
 
 // ==============================================================================
 // ARQUIVO FONTE: 08_main.js
@@ -66668,22 +65822,9 @@ function doGet(e) {
       // Mesma política do worker: nunca descarta pedidos pendentes ou falhas sem arquivo.
       manterPersistenciaBot();
     }
-    if(e.parameter.action==="poll_pc_tasks") {
-      var tasks = (typeof obterTarefasPcPendentes === "function") ? obterTarefasPcPendentes() : [];
-      return ContentService.createTextOutput(JSON.stringify({ok: true, tasks: tasks})).setMimeType(ContentService.MimeType.JSON);
-    }
-    if(e.parameter.action==="complete_pc_task") {
-      var tid = e.parameter.task_id;
-      var st = e.parameter.status || "done";
-      var res = e.parameter.resultado || "";
-      if (typeof concluirTarefaPc === "function") {
-        concluirTarefaPc(tid, st, res);
-      }
-      return ContentService.createTextOutput(JSON.stringify({ok: true, task_id: tid, status: st})).setMimeType(ContentService.MimeType.JSON);
-    }
-    info.configured=["TELEGRAM_BOT_TOKEN","TELEGRAM_CHAT_ID","WEB_APP_URL","WEBHOOK_SECRET","NOTION_TOKEN","NOTION_TASKS_DB_ID","NOTION_HABIT_LOG_DB_ID","SPREADSHEET_ID_REMUME","SPREADSHEET_ID_INTERACOES"].filter(function(k){return !!ConfigService.get(k);});
+    info.configured=["TELEGRAM_BOT_TOKEN","TELEGRAM_CHAT_ID","WEB_APP_URL","WEBHOOK_SECRET"].filter(function(k){return !!ConfigService.get(k);});
     info.gemini_keys_count=ConfigService.getArray("GEMINI_API_KEYS").length;
-    info.worker=ScriptApp.getProjectTriggers().some(function(t){return t.getHandlerFunction()==="processarFilaTelegram";});
+    info.worker=(typeof ScriptApp !== "undefined" && ScriptApp.getProjectTriggers) ? ScriptApp.getProjectTriggers().some(function(t){return t.getHandlerFunction()==="processarFilaTelegram";}) : true;
     var filaAll=PersistenciaBot.snapshot();
     info.queue=PersistenciaBot.chaves("inbox_",filaAll).length;
     info.outbox=PersistenciaBot.listar("outbox_",filaAll).map(function(r){return {id:r.key,status:r.valor.status||"unknown"};});
@@ -66772,7 +65913,7 @@ function doPost(e) {
       try {
         var cfg = JSON.parse(e.postData.contents);
         var props = PropertiesService.getScriptProperties();
-        var chavesPermitidas = ["GEMINI_API_KEYS", "PROVEDOR_TEXTO_PADRAO", "SPREADSHEET_ID_REMUME", "SPREADSHEET_ID_INTERACOES", "PESO_ATUAL", "BF_ATUAL", "MOUNJARO_SEMANA", "MOUNJARO_DOSE"];
+        var chavesPermitidas = ["GEMINI_API_KEYS", "PROVEDOR_TEXTO_PADRAO", "PESO_ATUAL", "BF_ATUAL", "MOUNJARO_SEMANA", "MOUNJARO_DOSE"];
         chavesPermitidas.forEach(function(k) {
           if (cfg[k] !== undefined && cfg[k] !== null && cfg[k] !== "") {
             props.setProperty(k, typeof cfg[k] === "string" ? cfg[k] : JSON.stringify(cfg[k]));
@@ -66794,8 +65935,6 @@ function doPost(e) {
     remetenteId = String(u.message.chat.id);
   } else if (u.callback_query && u.callback_query.message && u.callback_query.message.chat) {
     remetenteId = String(u.callback_query.message.chat.id);
-  } else if (u.inline_query && u.inline_query.from) {
-    remetenteId = String(u.inline_query.from.id);
   }
 
   var allowedList = (typeof ConfigService.getArray === "function")
@@ -66803,14 +65942,6 @@ function doPost(e) {
     : String(allowed).split(",").map(function(s){ return String(s).trim(); });
 
   if (!remetenteId || allowedList.indexOf(remetenteId) === -1) return HtmlService.createHtmlOutput("Forbidden");
-
-  // Fast-Path de resposta instantânea para consultas em linha (@bot)
-  if (u.inline_query) {
-    if (typeof processarInlineQuery === "function") {
-      processarInlineQuery(u.inline_query);
-    }
-    return HtmlService.createHtmlOutput("OK");
-  }
 
   if (u.callback_query) {
     destravarCallbackTelegramImediato(u.callback_query);
@@ -66871,16 +66002,15 @@ function configurarWebhookTelegram() {
   var secret=ConfigService.exigir("WEBHOOK_SECRET");
   var response=UrlFetchApp.fetch("https://api.telegram.org/bot"+token+"/setWebhook", {
     method:"post",contentType:"application/json",muteHttpExceptions:true,
-    payload:JSON.stringify({url:url.split("?")[0]+"?secret="+encodeURIComponent(secret),secret_token:secret,drop_pending_updates:false,max_connections:1,allowed_updates:["message","callback_query","inline_query"]})
+    payload:JSON.stringify({url:url.split("?")[0]+"?secret="+encodeURIComponent(secret),secret_token:secret,drop_pending_updates:false,max_connections:40,allowed_updates:["message","callback_query"]})
   });
   if(response.getResponseCode()!==200 || !JSON.parse(response.getContentText()).ok) throw new Error("Falha ao registrar webhook.");
-  if(!ScriptApp.getProjectTriggers().some(function(t){return t.getHandlerFunction()==="processarFilaTelegram";})) ScriptApp.newTrigger("processarFilaTelegram").timeBased().everyMinutes(1).create();
   return {ok:true};
 }
 
 // Catálogo de referência dos comandos aceitos pelo bot no chat
 var COMANDOS_CLINICOS_CATALOGO = [
-  "gaso", "conduta", "task", "tasks", "duvida", "dva", "sri", "agenda", "plantao_fim", "teclado",
+  "gaso", "conduta", "duvida", "dva", "sri", "agenda", "plantao_fim", "teclado",
   "soap", "rx", "enfermaria", "leito", "passagem", "alta", "round", "calc", "manual"
 ];
 
@@ -68073,52 +67203,7 @@ function verificarERegistrarCallbackId(callbackId, data) {
   return true;
 }
 
-function enfileirarTarefaPc(chatId, tarefa, args) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(15000);
-  try {
-    var sufixo = (typeof Utilities !== 'undefined' && Utilities.getUuid) ? Utilities.getUuid().replace(/-/g,'').substring(0,6) : Math.random().toString(36).substring(2,7);
-    var taskId = 'pctask_' + Date.now() + '_' + sufixo;
-    var payload = {
-      id: taskId,
-      chat_id: String(chatId),
-      tarefa: String(tarefa || '').toLowerCase(),
-      args: args || [],
-      status: 'pending',
-      created: Date.now()
-    };
-    PersistenciaBot.salvar(taskId, payload);
-    return taskId;
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function obterTarefasPcPendentes() {
-  var all = PersistenciaBot.snapshot(true);
-  return PersistenciaBot.listar('pctask_', all).filter(function(r) {
-    return r.valor && r.valor.status === 'pending';
-  }).map(function(r) { return r.valor; });
-}
-
-function concluirTarefaPc(taskId, status, resultado) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(15000);
-  try {
-    var reg = PersistenciaBot.ler(taskId);
-    if (!reg) return false;
-    reg.status = status || 'done';
-    reg.resultado = resultado || '';
-    reg.completed = Date.now();
-    PersistenciaBot.salvar(taskId, reg);
-    return true;
-  } finally {
-    lock.releaseLock();
-  }
-}
-
 function rotearUpdate(update) {
-  if(update.inline_query && typeof processarInlineQuery === 'function') return processarInlineQuery(update.inline_query);
   if(update.callback_query) return processarCallbackBotao(update.callback_query);
   var m=update.message;
   if(!m) return;
@@ -68400,6 +67485,7 @@ function processarCaixaSaida(all) {
 
 // Arquivos permanecem privados no Drive. Nunca reenvia nem reexecuta uma pendência.
 function pastaPendenciasBot(criar) {
+  if (typeof DriveApp === 'undefined') return null;
   var p=PropertiesService.getScriptProperties(),id=p.getProperty('BOT_PENDENCIAS_FOLDER_ID');
   if(id) return DriveApp.getFolderById(id);
   if(!criar) return null;
@@ -68409,6 +67495,7 @@ function pastaPendenciasBot(criar) {
 }
 function arquivarPendenciaBot(key, item) {
   if (item.archiveId) return item;
+  if (typeof DriveApp === 'undefined') throw new Error('DriveApp indisponível no runtime Node.');
   var pasta=pastaPendenciasBot(true);
   var file=pasta.createFile(key+'.json',JSON.stringify({key:key,registro:item}), 'application/json');
   var arquivoId=file.getId();
@@ -68445,6 +67532,7 @@ function recuperarRegistroBot(key) {
   if(!/^(?:inbox_\d+|outbox_[\w-]+)$/.test(key)) return null;
   var item=PersistenciaBot.ler(key);
   if(item && !item.archiveId) return item;
+  if (typeof DriveApp === 'undefined') return null;
   var arquivo;
   if(item && item.archiveId) arquivo=DriveApp.getFileById(item.archiveId);
   else {
@@ -68639,16 +67727,6 @@ var _ultimoEnvioTelaTimestamp = {};
 
 function enviarTelaBot(chat, texto, kb, messageId) {
   if (messageId && String(texto).length < UX_MAX_EDIT_CHARS) {
-    var agora = Date.now();
-    var chaveThrottle = String(chat) + '_' + String(messageId);
-    var deltaEnvio = agora - (_ultimoEnvioTelaTimestamp[chaveThrottle] || 0);
-
-    // Cooldown defensivo anti-429: se duas edições quase simultâneas (< 40ms) ocorrerem, protege o limite da API
-    if (deltaEnvio < 40 && typeof Utilities !== 'undefined' && typeof Utilities.sleep === 'function') {
-      try { Utilities.sleep(40); } catch (_) {}
-    }
-    _ultimoEnvioTelaTimestamp[chaveThrottle] = Date.now();
-
     var contemHtml = /<\/?(?:b|i|u|s|code|pre|a)\b/i.test(texto);
     var parseMode = contemHtml ? 'HTML' : 'Markdown';
     var textoEnvio = contemHtml
@@ -70873,7 +69951,7 @@ function tratarCallbackUXCalc(chat, v, msgId) {
 
 function enviarRotinaBot(chat, messageId) {
   if (typeof ehUsuarioTitular === 'function' && !ehUsuarioTitular(chat)) {
-    return enviarTelaBot(chat, "🔒 *Recurso Restrito ao Titular*\n\nA central de rotina, lifestyle e agenda do Notion é exclusiva do administrador da conta.\n\nUse o botão abaixo para voltar ao início.", botoesBot([
+    return enviarTelaBot(chat, "🔒 *Recurso Restrito ao Titular*\n\nA central de rotina, lifestyle e agenda pessoal é exclusiva do administrador da conta.\n\nUse o botão abaixo para voltar ao início.", botoesBot([
       [['🏠 Início', 'ux:hub:inicio']]
     ]), messageId);
   }
@@ -70886,7 +69964,7 @@ function enviarRotinaBot(chat, messageId) {
               "Selecione uma opção rápida:";
 
   var botoes = botoesBot([
-    [['🎯 Sniper de Plantões', 'sniper:painel'], ['🔄 Restaurar Padrão', 'rotina:reset']],
+    [['🧠 Dúvidas Estudo', 'ux:rotina:duvidas_lista'], ['🔄 Restaurar Padrão', 'rotina:reset']],
     [['📆 Agenda de Hoje', 'ux:rotina:agenda'], ['📆 Agenda de Amanhã', 'ux:rotina:agenda_amanha']],
     [['☀️ Briefing Matinal', 'ux:rotina:briefing'], ['🌙 Check-in Noturno', 'ux:rotina:checkin']],
     [['🏠 Início', 'ux:hub:inicio']]
@@ -73096,14 +72174,12 @@ function tratarCallbackUX(cb) {
       } else {
         if (typeof ehUsuarioTitular === 'function' && !ehUsuarioTitular(chat)) {
           var kbRestrito = botoesBot([[['🏠 Início', 'ux:hub:inicio']]]);
-          return enviarTelaBot(chat, '🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Notion, Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use o início para acessar calculadoras, condutas e guias clínicos.', kbRestrito, msgId);
+          return enviarTelaBot(chat, '🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use o início para acessar calculadoras, condutas e guias clínicos.', kbRestrito, msgId);
         }
         if (v === 'agenda') {
           return consultarEventosAgenda('', chat, msgId);
         } else if (v === 'agenda_amanha') {
           return consultarEventosAgenda('amanha', chat, msgId);
-        } else if (v === 'tasks') {
-          return listarTarefasHojeNotion(chat, msgId);
         } else if (v === 'briefing') {
           return enviarBriefingMatinal(chat, true, msgId);
         } else if (v === 'checkin') {
@@ -77122,2765 +76198,4 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports.cockpitSangramentoPrimeiraMetade = cockpitSangramentoPrimeiraMetade;
   module.exports.cockpitViolenciaSexual = cockpitViolenciaSexual;
   module.exports.cockpitUrgenciaMamaVulva = cockpitUrgenciaMamaVulva;
-}
-
-
-// ==============================================================================
-// ARQUIVO FONTE: 14_sniper_plantoes.js
-// ==============================================================================
-
-// ============================================================================
-// MÓDULO 14: SNIPER DE PLANTÕES MÉDICOS (INTEGRADO À ABA ROTINA)
-// Pipeline Multi-Estágio: Zero-Trust -> Filtro 0ms -> Extrator -> Trava Rotina -> Stealth PV
-// ============================================================================
-
-var PlantaoSniperService = (function () {
-  var PROP_CONFIG_KEY = "SNIPER_PLANTOES_CONFIG_V1";
-  var PROP_BLACKLIST_KEY = "SNIPER_PLANTOES_BLACKLIST_V1";
-  var PROP_STATS_KEY = "SNIPER_PLANTOES_STATS_V1";
-  var PROP_LOCKED_SLOTS_KEY = "SNIPER_PLANTOES_LOCKED_SLOTS_V1";
-  var PROP_OFERTAS_CACHE_KEY = "SNIPER_PLANTOES_OFERTAS_MEM_V1";
-  var PROP_HISTORICO_KEY = "SNIPER_PLANTOES_HISTORICO_V1";
-  var PROP_ALLOWLIST_KEY = "SNIPER_PLANTOES_ALLOWLIST_V1";
-  var PROP_PAIRING_STATE_KEY = "SNIPER_PLANTOES_PAIRING_V1";
-
-  var DEFAULT_ALLOWLIST = [
-    { jid: "120363011111111@g.us", nome: "Plantões Premium SP & ABC", permitido: true, modoGrupo: "SNIPER_AUTO" },
-    { jid: "120363022222222@g.us", nome: "Plantões Grande SP", permitido: true, modoGrupo: "RADAR_ONLY" },
-    { jid: "120363033333333@g.us", nome: "Família Moraes (Privado)", permitido: false, modoGrupo: "BLOQUEADO" },
-    { jid: "120363044444444@g.us", nome: "Turma Medicina Internato", permitido: false, modoGrupo: "BLOQUEADO" }
-  ];
-
-  var DEFAULT_CONFIG = {
-    nome: "Médico(a) Assistente",
-    crm: "CRM/SP",
-    telefoneWhatsApp: "5511999998888",
-    modoOperacao: "SNIPER_AUTO", // "SNIPER_AUTO" ou "SEMI_AUTO"
-    responderApenasPv: false,    // true = Modo Fantasma (só chama no PV do escalista)
-    valorMinimo12h: 1300,
-    valorMinimoHora: 108,
-    cidadesPermitidas: [],       // Vazio = Sem restrição (definido pelos grupos autorizados na Allowlist)
-    filtroCidadesAtivo: false,   // false = 100% das cidades dos grupos permitidos são aceitas
-    setoresPermitidos: [
-      "Porta",
-      "Ficha Verde",
-      "Clínica Médica",
-      "Observação",
-      "Enfermaria"
-    ],
-    autoAgendarRotina: true,
-    exigirAllowlist: true
-  };
-
-  var DEFAULT_BLACKLIST = [
-    { termo: "UPA Fantasma Sul", motivo: "Atraso recorrente > 60 dias relatado na comunidade" },
-    { termo: "Cooperativa CaloteMed", motivo: "Inadimplência conhecida em plantões extras" },
-    { termo: "Hospital Atraso Geral", motivo: "Histórico de glosa indevida de PJ" }
-  ];
-
-  var CATALOGO_CIDADES_PADRAO = [
-    "São Paulo",
-    "ABC",
-    "Santo André",
-    "São Bernardo",
-    "São Caetano",
-    "Diadema",
-    "Mauá",
-    "Osasco",
-    "Guarulhos",
-    "Barueri",
-    "Cotia",
-    "Taboão da Serra",
-    "Mogi das Cruzes",
-    "Santos",
-    "Campinas",
-    "Jundiaí",
-    "Sorocaba",
-    "Ribeirão Preto",
-    "São José dos Campos"
-  ];
-
-  var CATALOGO_SETORES_PADRAO = [
-    "Porta",
-    "Ficha Verde",
-    "Clínica Médica",
-    "Observação",
-    "Enfermaria",
-    "Sala Vermelha",
-    "UTI Adulto",
-    "UTI Pediátrica",
-    "Pediatria",
-    "Ortopedia",
-    "Ginecologia e Obstetrícia",
-    "Cirurgia Geral",
-    "Psiquiatria",
-    "Anestesiologia",
-    "Cardiologia"
-  ];
-
-  // --------------------------------------------------------------------------
-  // Helpers de Persistência e Normalização
-  // --------------------------------------------------------------------------
-  function _lerJsonProp(chave, fallback) {
-    try {
-      var raw = PropertiesService.getScriptProperties().getProperty(chave);
-      if (!raw) return fallback;
-      var parsed = JSON.parse(raw);
-      return parsed !== null && parsed !== undefined ? parsed : fallback;
-    } catch (e) {
-      return fallback;
-    }
-  }
-
-  function _salvarJsonProp(chave, valor) {
-    try {
-      PropertiesService.getScriptProperties().setProperty(chave, JSON.stringify(valor));
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function _normalizarTexto(str) {
-    if (!str) return "";
-    return String(str)
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  function _sanitizarTelefoneWhatsApp(rawInput) {
-    if (!rawInput) return "";
-    var limpo = String(rawInput)
-      .split("@")[0]   // Remove @s.whatsapp.net ou @g.us
-      .split(":")[0]   // Remove sufixo de device Baileys (:12, :0, etc.)
-      .replace(/\D/g, "");
-
-    if (!limpo) return "";
-
-    // Remove prefixo 0 de operadora nacional (ex: 011988887777 -> 11988887777)
-    if (limpo.length === 12 && limpo.charAt(0) === "0") {
-      limpo = limpo.slice(1);
-    }
-
-    // Se tem 10 ou 11 dígitos (DDD + número brasileiro), adiciona DDI 55
-    if (limpo.length === 10 || limpo.length === 11) {
-      limpo = "55" + limpo;
-    }
-
-    // Valida formato brasileiro com DDI 55 (12 ou 13 dígitos)
-    if (limpo.length >= 12 && limpo.length <= 13 && limpo.indexOf("55") === 0) {
-      var ddd = parseInt(limpo.slice(2, 4), 10);
-      if (ddd >= 11 && ddd <= 99) {
-        return limpo;
-      }
-    }
-
-    return "";
-  }
-
-  // --------------------------------------------------------------------------
-  // Configuração do Sniper
-  // --------------------------------------------------------------------------
-  function obterConfigSniper() {
-    var salvo = _lerJsonProp(PROP_CONFIG_KEY, null);
-    if (!salvo || typeof salvo !== "object") {
-      var inicial = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-      _salvarJsonProp(PROP_CONFIG_KEY, inicial);
-      return inicial;
-    }
-    var cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-    for (var k in salvo) {
-      if (Object.prototype.hasOwnProperty.call(salvo, k)) {
-        cfg[k] = salvo[k];
-      }
-    }
-    if (!cfg.schemaVersion || cfg.schemaVersion < 2) {
-      if (
-        Array.isArray(cfg.cidadesPermitidas) &&
-        cfg.cidadesPermitidas.join(",") === "São Paulo,ABC,Santo André,São Bernardo,São Caetano,Osasco"
-      ) {
-        cfg.cidadesPermitidas = [];
-        cfg.filtroCidadesAtivo = false;
-      }
-      cfg.schemaVersion = 2;
-      _salvarJsonProp(PROP_CONFIG_KEY, cfg);
-    }
-    if (!Array.isArray(cfg.setoresPermitidos)) {
-      cfg.setoresPermitidos = DEFAULT_CONFIG.setoresPermitidos.slice();
-    }
-    cfg.valorMinimo12h = Number(cfg.valorMinimo12h) || 1300;
-    cfg.valorMinimoHora = Math.round(cfg.valorMinimo12h / 12);
-    return cfg;
-  }
-
-  function salvarConfigSniper(novaConfig) {
-    var atual = obterConfigSniper();
-    if (novaConfig && typeof novaConfig === "object") {
-      for (var k in novaConfig) {
-        if (Object.prototype.hasOwnProperty.call(novaConfig, k)) {
-          atual[k] = novaConfig[k];
-        }
-      }
-    }
-    atual.valorMinimo12h = Number(atual.valorMinimo12h) || 1300;
-    atual.valorMinimoHora = Math.round(atual.valorMinimo12h / 12);
-    _salvarJsonProp(PROP_CONFIG_KEY, atual);
-    return atual;
-  }
-
-  function redefinirConfigPadrao() {
-    var padrao = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-    _salvarJsonProp(PROP_CONFIG_KEY, padrao);
-    return padrao;
-  }
-
-  // --------------------------------------------------------------------------
-  // Catálogo e Gestão de Cidades e Setores Permitidos
-  // --------------------------------------------------------------------------
-  function obterCatalogoCidadesDisponiveis() {
-    var cfg = obterConfigSniper();
-    var ativas = Array.isArray(cfg.cidadesPermitidas) ? cfg.cidadesPermitidas : DEFAULT_CONFIG.cidadesPermitidas;
-    var mapa = {};
-    var lista = [];
-    var i;
-
-    for (i = 0; i < CATALOGO_CIDADES_PADRAO.length; i++) {
-      var c = CATALOGO_CIDADES_PADRAO[i];
-      var norm = _normalizarTexto(c);
-      if (!mapa[norm]) {
-        mapa[norm] = true;
-        lista.push(c);
-      }
-    }
-
-    for (i = 0; i < ativas.length; i++) {
-      var a = ativas[i];
-      var normA = _normalizarTexto(a);
-      if (normA && !mapa[normA]) {
-        mapa[normA] = true;
-        lista.push(a);
-      }
-    }
-
-    return lista;
-  }
-
-  function alternarCidadePermitida(cidadeNome) {
-    var cfg = obterConfigSniper();
-    var cidades = Array.isArray(cfg.cidadesPermitidas) ? cfg.cidadesPermitidas.slice() : [];
-    var nomeTrim = String(cidadeNome || "").trim();
-    if (!nomeTrim) return { sucesso: false, ativada: false, cidades: cidades };
-
-    var norm = _normalizarTexto(nomeTrim);
-    var idx = -1;
-    for (var i = 0; i < cidades.length; i++) {
-      if (_normalizarTexto(cidades[i]) === norm) {
-        idx = i;
-        break;
-      }
-    }
-
-    var ativada = false;
-    if (idx !== -1) {
-      cidades.splice(idx, 1);
-      ativada = false;
-    } else {
-      cidades.push(nomeTrim);
-      ativada = true;
-    }
-
-    salvarConfigSniper({
-      cidadesPermitidas: cidades,
-      filtroCidadesAtivo: cidades.length > 0
-    });
-    return { sucesso: true, ativada: ativada, cidade: nomeTrim, cidades: cidades };
-  }
-
-  function redefinirCidadesPadrao() {
-    var padrao = DEFAULT_CONFIG.cidadesPermitidas.slice();
-    salvarConfigSniper({ cidadesPermitidas: padrao, filtroCidadesAtivo: false });
-    return padrao;
-  }
-
-  function definirTodasCidades(ativarTodas) {
-    var novas = [];
-    if (ativarTodas) {
-      novas = obterCatalogoCidadesDisponiveis().slice();
-    }
-    salvarConfigSniper({
-      cidadesPermitidas: novas,
-      filtroCidadesAtivo: false
-    });
-    return novas;
-  }
-
-  function obterCatalogoSetoresDisponiveis() {
-    var cfg = obterConfigSniper();
-    var ativas = Array.isArray(cfg.setoresPermitidos) ? cfg.setoresPermitidos : DEFAULT_CONFIG.setoresPermitidos;
-    var mapa = {};
-    var lista = [];
-    var i;
-
-    for (i = 0; i < CATALOGO_SETORES_PADRAO.length; i++) {
-      var s = CATALOGO_SETORES_PADRAO[i];
-      var norm = _normalizarTexto(s);
-      if (!mapa[norm]) {
-        mapa[norm] = true;
-        lista.push(s);
-      }
-    }
-
-    for (i = 0; i < ativas.length; i++) {
-      var sa = ativas[i];
-      var normS = _normalizarTexto(sa);
-      if (normS && !mapa[normS]) {
-        mapa[normS] = true;
-        lista.push(sa);
-      }
-    }
-
-    return lista;
-  }
-
-  function alternarSetorPermitido(setorNomeOuIndice) {
-    var cfg = obterConfigSniper();
-    var catalogo = obterCatalogoSetoresDisponiveis();
-    var setores = Array.isArray(cfg.setoresPermitidos) ? cfg.setoresPermitidos.slice() : [];
-    var nomeTrim = "";
-
-    if (typeof setorNomeOuIndice === "number" || /^\d+$/.test(String(setorNomeOuIndice))) {
-      var idxCat = parseInt(setorNomeOuIndice, 10);
-      if (idxCat >= 0 && idxCat < catalogo.length) {
-        nomeTrim = catalogo[idxCat];
-      }
-    } else {
-      nomeTrim = String(setorNomeOuIndice || "").trim();
-    }
-
-    if (!nomeTrim) return { sucesso: false, ativado: false, setores: setores };
-
-    var norm = _normalizarTexto(nomeTrim);
-    var idx = -1;
-    for (var i = 0; i < setores.length; i++) {
-      if (_normalizarTexto(setores[i]) === norm) {
-        idx = i;
-        break;
-      }
-    }
-
-    var ativado = false;
-    if (idx !== -1) {
-      setores.splice(idx, 1);
-      ativado = false;
-    } else {
-      setores.push(nomeTrim);
-      ativado = true;
-    }
-
-    salvarConfigSniper({ setoresPermitidos: setores });
-    return { sucesso: true, ativado: ativado, setor: nomeTrim, setores: setores };
-  }
-
-  function redefinirSetoresPadrao() {
-    var padrao = DEFAULT_CONFIG.setoresPermitidos.slice();
-    salvarConfigSniper({ setoresPermitidos: padrao });
-    return padrao;
-  }
-
-  // --------------------------------------------------------------------------
-  // Estatísticas / Métricas e Histórico
-  // --------------------------------------------------------------------------
-  function obterEstatisticas() {
-    var padrao = {
-      totalAnalisadas: 0,
-      filtradasEstagio1: 0,
-      rejeitadasCriterios: 0,
-      calotesEvitados: 0,
-      plantoesCapturados: 0,
-      receitaGarantidaReais: 0,
-      ultimoDisparoEm: null
-    };
-    var s = _lerJsonProp(PROP_STATS_KEY, padrao);
-    for (var k in padrao) {
-      if (typeof s[k] === "undefined") s[k] = padrao[k];
-    }
-    return s;
-  }
-
-  function salvarEstatisticas(stats) {
-    _salvarJsonProp(PROP_STATS_KEY, stats);
-    return stats;
-  }
-
-  function registrarMetrica(chaveOuObjeto, incremento) {
-    var stats = obterEstatisticas();
-    if (chaveOuObjeto && typeof chaveOuObjeto === "object") {
-      for (var k in chaveOuObjeto) {
-        if (Object.prototype.hasOwnProperty.call(chaveOuObjeto, k)) {
-          if (typeof stats[k] === "number" && typeof chaveOuObjeto[k] === "number") {
-            stats[k] += chaveOuObjeto[k];
-          } else {
-            stats[k] = chaveOuObjeto[k];
-          }
-        }
-      }
-    } else if (typeof chaveOuObjeto === "string") {
-      var inc = typeof incremento === "number" ? incremento : 1;
-      stats[chaveOuObjeto] = (Number(stats[chaveOuObjeto]) || 0) + inc;
-    }
-    return salvarEstatisticas(stats);
-  }
-
-  function obterHistorico(limite) {
-    var lista = _lerJsonProp(PROP_HISTORICO_KEY, []);
-    if (!Array.isArray(lista)) return [];
-    var max = Number(limite) || 50;
-    return lista.slice(0, max);
-  }
-
-  function _registrarNoHistorico(evento) {
-    if (!evento || typeof evento !== "object") return;
-    var lista = _lerJsonProp(PROP_HISTORICO_KEY, []);
-    if (!Array.isArray(lista)) lista = [];
-    evento.registradoEm = evento.registradoEm || new Date().toISOString();
-    lista.unshift(evento);
-    if (lista.length > 60) {
-      lista = lista.slice(0, 60);
-    }
-    _salvarJsonProp(PROP_HISTORICO_KEY, lista);
-  }
-
-  function limparHistorico() {
-    _salvarJsonProp(PROP_HISTORICO_KEY, []);
-    return [];
-  }
-
-  // --------------------------------------------------------------------------
-  // Blacklist Anti-Calote Colaborativa
-  // --------------------------------------------------------------------------
-  function obterBlacklistCalote() {
-    var lista = _lerJsonProp(PROP_BLACKLIST_KEY, null);
-    if (!Array.isArray(lista)) {
-      var inicial = JSON.parse(JSON.stringify(DEFAULT_BLACKLIST));
-      _salvarJsonProp(PROP_BLACKLIST_KEY, inicial);
-      return inicial;
-    }
-    return lista;
-  }
-
-  function adicionarBlacklistCalote(termo, motivo) {
-    var limpo = String(termo || "").trim();
-    if (!limpo) return obterBlacklistCalote();
-    var lista = obterBlacklistCalote();
-    var normAlvo = _normalizarTexto(limpo);
-    for (var i = 0; i < lista.length; i++) {
-      if (_normalizarTexto(lista[i].termo) === normAlvo) {
-        return lista;
-      }
-    }
-    lista.push({
-      termo: limpo,
-      motivo: motivo || "Denunciado pelo médico via Telegram (1-Click Anti-Calote)",
-      adicionadoEm: new Date().toISOString()
-    });
-    _salvarJsonProp(PROP_BLACKLIST_KEY, lista);
-    return lista;
-  }
-
-  function removerTermoBlacklist(termoOuIndice) {
-    var lista = obterBlacklistCalote();
-    if (typeof termoOuIndice === "number" || /^\d+$/.test(String(termoOuIndice))) {
-      var idx = parseInt(termoOuIndice, 10);
-      if (idx >= 0 && idx < lista.length) {
-        lista.splice(idx, 1);
-        _salvarJsonProp(PROP_BLACKLIST_KEY, lista);
-      }
-      return lista;
-    }
-    var alvo = _normalizarTexto(termoOuIndice);
-    var filtrada = [];
-    for (var i = 0; i < lista.length; i++) {
-      if (_normalizarTexto(lista[i].termo) !== alvo) {
-        filtrada.push(lista[i]);
-      }
-    }
-    _salvarJsonProp(PROP_BLACKLIST_KEY, filtrada);
-    return filtrada;
-  }
-
-  function verificarBlacklist(textoOuHospital) {
-    var alvo = _normalizarTexto(textoOuHospital);
-    if (!alvo) return { bloqueado: false };
-    var lista = obterBlacklistCalote();
-    for (var i = 0; i < lista.length; i++) {
-      var item = lista[i];
-      var termoNorm = _normalizarTexto(item.termo);
-      if (termoNorm && alvo.indexOf(termoNorm) !== -1) {
-        return {
-          bloqueado: true,
-          termo: item.termo,
-          motivo: item.motivo || "Restrição financeira na Blacklist Anti-Calote"
-        };
-      }
-    }
-    return { bloqueado: false };
-  }
-
-  // --------------------------------------------------------------------------
-  // Allowlist Zero-Trust de Grupos WhatsApp (Isolamento Estrito em 2 Camadas)
-  // --------------------------------------------------------------------------
-  function obterGruposAllowlist() {
-    var lista = _lerJsonProp(PROP_ALLOWLIST_KEY, null);
-    if (!Array.isArray(lista) || lista.length === 0) {
-      var copia = JSON.parse(JSON.stringify(DEFAULT_ALLOWLIST));
-      _salvarJsonProp(PROP_ALLOWLIST_KEY, copia);
-      return copia;
-    }
-    return lista;
-  }
-
-  function salvarGruposAllowlist(lista) {
-    if (!Array.isArray(lista)) return obterGruposAllowlist();
-    var limpa = [];
-    for (var i = 0; i < lista.length; i++) {
-      var g = lista[i] || {};
-      if (!g.jid) continue;
-      var modo = String(g.modoGrupo || "BLOQUEADO").toUpperCase();
-      if (modo !== "SNIPER_AUTO" && modo !== "RADAR_ONLY" && modo !== "BLOQUEADO") {
-        modo = "BLOQUEADO";
-      }
-      var permitido = (modo === "SNIPER_AUTO" || modo === "RADAR_ONLY") ? Boolean(g.permitido !== false) : false;
-      if (!permitido) modo = "BLOQUEADO";
-      limpa.push({
-        jid: String(g.jid).trim(),
-        nome: String(g.nome || g.jid).trim(),
-        permitido: permitido,
-        modoGrupo: modo
-      });
-    }
-    _salvarJsonProp(PROP_ALLOWLIST_KEY, limpa);
-    return limpa;
-  }
-
-  function atualizarStatusGrupoAllowlist(jidOuIndice, novoModoOuPermitido, nomeOpcional) {
-    var lista = obterGruposAllowlist();
-    var alvoIdx = -1;
-
-    if (typeof jidOuIndice === "number" || /^\d+$/.test(String(jidOuIndice))) {
-      var idxNum = parseInt(jidOuIndice, 10);
-      if (idxNum >= 0 && idxNum < lista.length) {
-        alvoIdx = idxNum;
-      }
-    }
-
-    var jidStr = String(jidOuIndice || "").trim();
-    if (alvoIdx === -1 && jidStr) {
-      var busca = jidStr.toLowerCase();
-      for (var i = 0; i < lista.length; i++) {
-        if (lista[i].jid.toLowerCase() === busca || lista[i].nome.toLowerCase() === busca) {
-          alvoIdx = i;
-          break;
-        }
-      }
-    }
-
-    var modo = "BLOQUEADO";
-    if (typeof novoModoOuPermitido === "boolean") {
-      modo = novoModoOuPermitido ? "SNIPER_AUTO" : "BLOQUEADO";
-    } else if (typeof novoModoOuPermitido === "string") {
-      var m = novoModoOuPermitido.toUpperCase().trim();
-      if (m === "SNIPER_AUTO" || m === "RADAR_ONLY" || m === "BLOQUEADO") {
-        modo = m;
-      }
-    }
-
-    if (alvoIdx === -1) {
-      if (jidStr.indexOf("@g.us") !== -1) {
-        lista.push({
-          jid: jidStr,
-          nome: String(nomeOpcional || jidStr).trim(),
-          permitido: modo !== "BLOQUEADO",
-          modoGrupo: modo
-        });
-        alvoIdx = lista.length - 1;
-      } else {
-        return { sucesso: false, motivo: "GRUPO_NAO_ENCONTRADO", grupos: lista };
-      }
-    } else {
-      lista[alvoIdx].modoGrupo = modo;
-      lista[alvoIdx].permitido = modo !== "BLOQUEADO";
-      if (nomeOpcional) {
-        lista[alvoIdx].nome = String(nomeOpcional).trim();
-      }
-    }
-
-    var salva = salvarGruposAllowlist(lista);
-    return {
-      sucesso: true,
-      indice: alvoIdx,
-      grupo: salva[alvoIdx],
-      grupos: salva
-    };
-  }
-
-  function sincronizarGruposWhatsApp(gruposRecebidos) {
-    var listaAtual = obterGruposAllowlist();
-    var mapaIdx = {};
-    for (var i = 0; i < listaAtual.length; i++) {
-      mapaIdx[listaAtual[i].jid] = i;
-    }
-
-    var recebidos = gruposRecebidos;
-    // Se não recebeu array direto, tenta consultar o Bridge WhatsApp em execução
-    if (!Array.isArray(recebidos) && typeof globalThis !== "undefined" && globalThis.WhatsAppBridgeService && typeof globalThis.WhatsAppBridgeService.listarGruposConectados === "function") {
-      try {
-        recebidos = globalThis.WhatsAppBridgeService.listarGruposConectados() || [];
-      } catch (e) {
-        recebidos = [];
-      }
-    }
-    if (!Array.isArray(recebidos)) recebidos = [];
-
-    var novosAdicionados = 0;
-
-    for (var j = 0; j < recebidos.length; j++) {
-      var grp = recebidos[j] || {};
-      var jid = String(grp.jid || grp.id || grp.remoteJid || "").trim();
-      var nome = String(grp.nome || grp.subject || grp.name || jid).trim();
-
-      // Filtra estritamente apenas JIDs de grupos (@g.us)
-      if (!jid || jid.indexOf("@g.us") === -1 || jid.indexOf("@g.us") !== jid.length - 5) {
-        continue;
-      }
-
-      if (Object.prototype.hasOwnProperty.call(mapaIdx, jid)) {
-        var idxExistente = mapaIdx[jid];
-        if (nome && nome !== jid) {
-          listaAtual[idxExistente].nome = nome;
-        }
-      } else {
-        // Zero-Trust: Todo novo grupo descoberto entra BLOQUEADO por padrão
-        listaAtual.push({
-          jid: jid,
-          nome: nome || ("Grupo " + jid.substring(0, 8)),
-          permitido: false,
-          modoGrupo: "BLOQUEADO"
-        });
-        mapaIdx[jid] = listaAtual.length - 1;
-        novosAdicionados++;
-      }
-    }
-
-    var listaSalva = salvarGruposAllowlist(listaAtual);
-    return {
-      sucesso: true,
-      totalGrupos: listaSalva.length,
-      novosAdicionados: novosAdicionados,
-      grupos: listaSalva
-    };
-  }
-
-  function alternarPermissaoGrupo(indiceOuJid) {
-    var lista = obterGruposAllowlist();
-    var alvoIdx = -1;
-
-    if (typeof indiceOuJid === "number" || /^\d+$/.test(String(indiceOuJid))) {
-      var idxNum = parseInt(indiceOuJid, 10);
-      if (idxNum >= 0 && idxNum < lista.length) {
-        alvoIdx = idxNum;
-      }
-    }
-
-    if (alvoIdx === -1 && indiceOuJid) {
-      var busca = String(indiceOuJid).trim().toLowerCase();
-      for (var i = 0; i < lista.length; i++) {
-        if (lista[i].jid.toLowerCase() === busca || lista[i].nome.toLowerCase() === busca) {
-          alvoIdx = i;
-          break;
-        }
-      }
-    }
-
-    if (alvoIdx === -1) {
-      return { sucesso: false, motivo: "GRUPO_NAO_ENCONTRADO", grupos: lista };
-    }
-
-    var item = lista[alvoIdx];
-    var modoAtual = String(item.modoGrupo || "BLOQUEADO").toUpperCase();
-
-    // Ciclo Zero-Trust: BLOQUEADO -> RADAR_ONLY -> SNIPER_AUTO -> BLOQUEADO
-    if (modoAtual === "BLOQUEADO" || !item.permitido) {
-      item.modoGrupo = "RADAR_ONLY";
-      item.permitido = true;
-    } else if (modoAtual === "RADAR_ONLY") {
-      item.modoGrupo = "SNIPER_AUTO";
-      item.permitido = true;
-    } else {
-      item.modoGrupo = "BLOQUEADO";
-      item.permitido = false;
-    }
-
-    var listaSalva = salvarGruposAllowlist(lista);
-    return {
-      sucesso: true,
-      indice: alvoIdx,
-      grupo: listaSalva[alvoIdx],
-      grupos: listaSalva
-    };
-  }
-
-  function validarIsolamentoCamada1E2(envelope) {
-    var env = envelope || {};
-
-    // CAMADA 1: Bloqueio absoluto de mensagens próprias, chats privados (@s.whatsapp.net), status e canais
-    if (env.fromMe === true || (env.key && env.key.fromMe === true)) {
-      return {
-        permitido: false,
-        camada: 1,
-        codigo: "MENSAGEM_PROPRIA_IGNORADA",
-        motivo: "Mensagem enviada pelo próprio titular ignorada na Camada 1",
-        modoGrupo: "BLOQUEADO"
-      };
-    }
-
-    var remoteJid = String(
-      env.remoteJid ||
-      env.jid ||
-      env.groupJid ||
-      (env.key && env.key.remoteJid) ||
-      ""
-    ).trim();
-
-    if (remoteJid) {
-      var terminaComGus = remoteJid.length > 5 && remoteJid.indexOf("@g.us") === (remoteJid.length - 5);
-      if (
-        !terminaComGus ||
-        remoteJid.indexOf("@s.whatsapp.net") !== -1 ||
-        remoteJid.indexOf("@lid") !== -1 ||
-        remoteJid === "status@broadcast" ||
-        remoteJid.indexOf("@broadcast") !== -1 ||
-        remoteJid.indexOf("@newsletter") !== -1
-      ) {
-        return {
-          permitido: false,
-          camada: 1,
-          codigo: "CHAT_PRIVADO_OU_STATUS_BLOQUEADO",
-          motivo: "Conversa privada ou status bloqueado estritamente na Camada 1 (" + remoteJid + ")",
-          remoteJid: remoteJid,
-          modoGrupo: "BLOQUEADO"
-        };
-      }
-    }
-
-    // CAMADA 2: Validação Estrita na Allowlist de Grupos Permitidos
-    var nomeGrupo = String(env.grupoNome || env.groupName || "").trim();
-    var exigirAllowlist = env.exigirAllowlist !== false; // Padrão TRUE (Zero-Trust)
-
-    if (remoteJid || exigirAllowlist) {
-      var allowlist = obterGruposAllowlist();
-      var grupoEncontrado = null;
-
-      for (var i = 0; i < allowlist.length; i++) {
-        if (remoteJid && allowlist[i].jid === remoteJid) {
-          grupoEncontrado = allowlist[i];
-          break;
-        }
-        if (!remoteJid && nomeGrupo && _normalizarTexto(allowlist[i].nome) === _normalizarTexto(nomeGrupo)) {
-          grupoEncontrado = allowlist[i];
-          break;
-        }
-      }
-
-      if (!grupoEncontrado || grupoEncontrado.permitido !== true || grupoEncontrado.modoGrupo === "BLOQUEADO") {
-        return {
-          permitido: false,
-          camada: 2,
-          codigo: "GRUPO_NAO_AUTORIZADO_ALLOWLIST",
-          motivo: "Grupo fora da Allowlist ou marcado como BLOQUEADO (" + (nomeGrupo || remoteJid || "desconhecido") + ")",
-          remoteJid: remoteJid,
-          nomeGrupo: grupoEncontrado ? grupoEncontrado.nome : nomeGrupo,
-          modoGrupo: "BLOQUEADO"
-        };
-      }
-
-      return {
-        permitido: true,
-        camada: 2,
-        codigo: "GRUPO_AUTORIZADO_ALLOWLIST",
-        remoteJid: grupoEncontrado.jid,
-        nomeGrupo: grupoEncontrado.nome,
-        modoGrupo: grupoEncontrado.modoGrupo || "RADAR_ONLY"
-      };
-    }
-
-    return {
-      permitido: true,
-      camada: 2,
-      codigo: "MODO_SIMULACAO_INTERNA",
-      remoteJid: "",
-      nomeGrupo: nomeGrupo || "Grupo Simulado",
-      modoGrupo: "SNIPER_AUTO"
-    };
-  }
-
-  // --------------------------------------------------------------------------
-  // Pareamento WhatsApp 8 Dígitos (Integração Real + Fallback Estruturado)
-  // --------------------------------------------------------------------------
-  function gerarCodigoPareamentoWhatsApp(telefoneInput) {
-    var foneSanitizado = _sanitizarTelefoneWhatsApp(telefoneInput);
-    if (!foneSanitizado) {
-      var cfg = obterConfigSniper();
-      foneSanitizado = _sanitizarTelefoneWhatsApp(cfg.telefoneWhatsApp);
-    }
-    if (!foneSanitizado) {
-      foneSanitizado = "5511999998888";
-    }
-
-    salvarConfigSniper({ telefoneWhatsApp: foneSanitizado });
-
-    // 1. Tenta solicitar ao Bridge Baileys/Evolution se disponível no runtime Node
-    if (typeof globalThis !== "undefined" && globalThis.WhatsAppBridgeService && typeof globalThis.WhatsAppBridgeService.solicitarPairingCode === "function") {
-      try {
-        var resBridge = globalThis.WhatsAppBridgeService.solicitarPairingCode(foneSanitizado);
-        if (resBridge && resBridge.codigo) {
-          var estadoReal = {
-            sucesso: true,
-            origem: "WHATSAPP_BRIDGE_LIVE",
-            telefone: foneSanitizado,
-            codigo: resBridge.codigo,
-            geradoEm: new Date().toISOString()
-          };
-          _salvarJsonProp(PROP_PAIRING_STATE_KEY, estadoReal);
-          return estadoReal;
-        }
-      } catch (e) {}
-    }
-
-    // 2. Tenta consultar endpoint local ou webhook configurado nas propriedades
-    try {
-      var bridgeUrl = PropertiesService.getScriptProperties().getProperty("WHATSAPP_BRIDGE_PAIR_URL");
-      if (bridgeUrl && typeof UrlFetchApp !== "undefined") {
-        var resp = UrlFetchApp.fetch(bridgeUrl, {
-          method: "post",
-          contentType: "application/json",
-          payload: JSON.stringify({ phone: foneSanitizado }),
-          muteHttpExceptions: true
-        });
-        if (resp && resp.getResponseCode() >= 200 && resp.getResponseCode() < 300) {
-          var body = JSON.parse(resp.getContentText() || "{}");
-          var codeRemoto = body.code || body.pairingCode || body.codigo;
-          if (codeRemoto) {
-            var estadoHttp = {
-              sucesso: true,
-              origem: "WHATSAPP_BRIDGE_HTTP",
-              telefone: foneSanitizado,
-              codigo: String(codeRemoto).toUpperCase(),
-              geradoEm: new Date().toISOString()
-            };
-            _salvarJsonProp(PROP_PAIRING_STATE_KEY, estadoHttp);
-            return estadoHttp;
-          }
-        }
-      }
-    } catch (e) {}
-
-    // 3. Gera token de sessão de pareamento determinístico/8-dígitos para o listener local consumir
-    var chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-    var p1 = "";
-    var p2 = "";
-    for (var i = 0; i < 4; i++) {
-      p1 += chars.charAt(Math.floor(Math.random() * chars.length));
-      p2 += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    var codigo8 = p1 + "-" + p2;
-    var estado = {
-      sucesso: true,
-      origem: "PAIRING_SESSION_QUEUE",
-      telefone: foneSanitizado,
-      codigo: codigo8,
-      geradoEm: new Date().toISOString()
-    };
-    _salvarJsonProp(PROP_PAIRING_STATE_KEY, estado);
-    return estado;
-  }
-
-  // --------------------------------------------------------------------------
-  // Deduplicação Cross-Group Completa (Sem Truncamento nos Primeiros 90 Chars)
-  // --------------------------------------------------------------------------
-  function gerarHashOferta(textoOuOferta) {
-    var baseStr = "";
-    if (textoOuOferta && typeof textoOuOferta === "object") {
-      baseStr = [
-        _normalizarTexto(textoOuOferta.hospital || ""),
-        _normalizarTexto(textoOuOferta.cidade || ""),
-        _normalizarTexto(textoOuOferta.setor || ""),
-        _normalizarTexto(textoOuOferta.dataTurnoChave || ""),
-        String(textoOuOferta.valorTotal || 0),
-        _normalizarTexto(textoOuOferta.textoOriginal || "")
-      ].join("|");
-    } else {
-      baseStr = _normalizarTexto(String(textoOuOferta || "")).replace(/[^a-z0-9]/g, "");
-    }
-
-    // Algoritmo DJB2 duplo sobre 100% da string para evitar colisão em textos com cabeçalhos iguais
-    var h1 = 5381;
-    var h2 = 52711;
-    for (var i = 0; i < baseStr.length; i++) {
-      var ch = baseStr.charCodeAt(i);
-      h1 = ((h1 << 5) + h1) ^ ch;
-      h2 = ((h2 << 5) + h2) + ch;
-    }
-    var hex1 = (h1 >>> 0).toString(16);
-    var hex2 = (h2 >>> 0).toString(16);
-    return "vaga_" + hex1 + "_" + hex2;
-  }
-
-  function jaProcessouOferta(hashOferta) {
-    if (!hashOferta) return false;
-    try {
-      var cache = CacheService.getScriptCache();
-      var hit = cache.get("SNIPER_DEDUP_" + hashOferta);
-      if (hit) return true;
-      cache.put("SNIPER_DEDUP_" + hashOferta, "1", 1800); // 30 min TTL
-      return false;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function salvarOfertaEmMemoria(oferta) {
-    if (!oferta || !oferta.hashOferta) return;
-    var map = _lerJsonProp(PROP_OFERTAS_CACHE_KEY, {});
-    map[oferta.hashOferta] = oferta;
-    var chaves = Object.keys(map);
-    if (chaves.length > 40) {
-      delete map[chaves[0]];
-    }
-    _salvarJsonProp(PROP_OFERTAS_CACHE_KEY, map);
-  }
-
-  function obterOfertaEmMemoria(hashOferta) {
-    if (!hashOferta) return null;
-    var map = _lerJsonProp(PROP_OFERTAS_CACHE_KEY, {});
-    return map[hashOferta] || null;
-  }
-
-  // --------------------------------------------------------------------------
-  // ESTÁGIO 1: Filtro Determinístico Ultra-Rápido (< 0.2ms, Custo Zero)
-  // --------------------------------------------------------------------------
-  function filtroRapidoEstagio1(texto) {
-    var raw = String(texto || "").trim();
-    if (raw.length < 20) {
-      return { passou: false, motivo: "MENSAGEM_CURTA_OU_FIGURINHA" };
-    }
-
-    var norm = _normalizarTexto(raw);
-
-    // 1. Filtra ofertas reversas (médico pedindo plantão em vez de oferecer)
-    var padroesOfertaReversa = [
-      "estou disponivel para plantao",
-      "estou disponivel p/ plantao",
-      "procuro plantao",
-      "preciso de plantao",
-      "alguem tem plantao para passar",
-      "disponivel para cobrir",
-      "busco plantao",
-      "pego plantao hoje",
-      "disponivel para hoje"
-    ];
-    for (var i = 0; i < padroesOfertaReversa.length; i++) {
-      if (norm.indexOf(padroesOfertaReversa[i]) !== -1) {
-        return { passou: false, motivo: "OFERTA_REVERSA_MEDICO_PROCURANDO" };
-      }
-    }
-
-    // 2. Exige presença de números (horário ou valor)
-    if (!/\d{1,4}/.test(norm)) {
-      return { passou: false, motivo: "SEM_VALORES_OU_HORARIOS" };
-    }
-
-    // 3. Exige pelo menos 1 gatilho semântico de vaga médica
-    var gatilhosVaga = [
-      "plantao",
-      "vaga",
-      "cobertura",
-      "preciso de medico",
-      "ficha verde",
-      "porta",
-      "clinica medica",
-      "enfermaria",
-      "observacao",
-      "sala vermelha",
-      "emergencia",
-      "upa",
-      "hospital",
-      "santa casa",
-      "pronto socorro",
-      "maternidade",
-      "ama",
-      "ubs",
-      "12h",
-      "6h",
-      "24h",
-      "noturno",
-      "diurno",
-      "cinderela",
-      "r$"
-    ];
-    var temGatilho = false;
-    for (var j = 0; j < gatilhosVaga.length; j++) {
-      if (norm.indexOf(gatilhosVaga[j]) !== -1) {
-        temGatilho = true;
-        break;
-      }
-    }
-    if (!temGatilho) {
-      return { passou: false, motivo: "CONVERSA_GERAL_SEM_GATILHO" };
-    }
-
-    // 4. Deduplicação Cross-Group pelo texto completo normalizado
-    var hashTexto = gerarHashOferta(raw);
-    if (jaProcessouOferta(hashTexto)) {
-      return {
-        passou: false,
-        motivo: "DUPLICATA_CROSS_GROUP",
-        hashOferta: hashTexto
-      };
-    }
-
-    return {
-      passou: true,
-      hashOferta: hashTexto
-    };
-  }
-
-  // --------------------------------------------------------------------------
-  // ESTÁGIO 2: Extrator Semântico Estruturado de Plantão Médico
-  // --------------------------------------------------------------------------
-  function _extrairSetorEspecialidade(norm) {
-    // Mapeamento em ordem de especificidade clínica (evita classificar especialidades restritas como "Porta")
-    var regrasSetor = [
-      {
-        nome: "UTI Pediátrica",
-        termos: ["uti pediatrica", "uti ped", "utip", "uti neonatal", "utin", "terapia intensiva pediatrica"]
-      },
-      {
-        nome: "Ginecologia e Obstetrícia",
-        termos: ["ginecologia", "obstetricia", "parto", "centro obstetrico", "maternidade", "gestante", "pre-natal", "go "]
-      },
-      {
-        nome: "Ortopedia",
-        termos: ["ortopedia", "ortopedista", "trauma ortopedico", "fratura", "gesso"]
-      },
-      {
-        nome: "Psiquiatria",
-        termos: ["psiquiatria", "psiquiatra", "saude mental", "caps "]
-      },
-      {
-        nome: "Anestesiologia",
-        termos: ["anestesio", "anestesiologia", "anestesista"]
-      },
-      {
-        nome: "Cirurgia Geral",
-        termos: ["cirurgia geral", "cirurgiao geral", "centro cirurgico", "cirurgia "]
-      },
-      {
-        nome: "Cardiologia",
-        termos: ["cardiologia", "cardiologista", "unidade coronariana", "uco"]
-      },
-      {
-        nome: "Pediatria",
-        termos: ["pediatria", "pediatra", "pronto socorro infantil", "ps infantil", "puericultura", "infantil"]
-      },
-      {
-        nome: "UTI Adulto",
-        termos: ["uti adulto", "uti geral", "terapia intensiva", "intensivista", "uti "]
-      },
-      {
-        nome: "Sala Vermelha",
-        termos: ["sala vermelha", "emergencia", "intubacao", "politrauma", "choque"]
-      },
-      {
-        nome: "Ficha Verde",
-        termos: ["ficha verde", "ficha azul", "baixa complexidade", "triagem"]
-      },
-      {
-        nome: "Observação",
-        termos: ["observacao", "sala amarela", "leito de observacao"]
-      },
-      {
-        nome: "Enfermaria",
-        termos: ["enfermaria", "internacao", "evolucao de enfermaria", "hospitalista"]
-      },
-      {
-        nome: "Clínica Médica",
-        termos: ["clinica medica", "clinico geral", "clinica geral", "cm "]
-      },
-      {
-        nome: "Porta",
-        termos: ["porta", "pronto atendimento", "pronto socorro", "pa ", "ps ", "atendimento geral"]
-      }
-    ];
-
-    var textoBusca = " " + norm + " ";
-    for (var i = 0; i < regrasSetor.length; i++) {
-      var regra = regrasSetor[i];
-      for (var j = 0; j < regra.termos.length; j++) {
-        if (textoBusca.indexOf(regra.termos[j]) !== -1) {
-          return regra.nome;
-        }
-      }
-    }
-
-    // Outras especialidades não permitidas por padrão (evita fallback cego para Porta)
-    var outrasEspecialidades = [
-      { termo: "neurologia", nome: "Neurologia" },
-      { termo: "neurocirurgia", nome: "Neurocirurgia" },
-      { termo: "oftalmologia", nome: "Oftalmologia" },
-      { termo: "otorrino", nome: "Otorrinolaringologia" },
-      { termo: "urologia", nome: "Urologia" },
-      { termo: "dermatologia", nome: "Dermatologia" },
-      { termo: "endoscopia", nome: "Endoscopia" },
-      { termo: "radiologia", nome: "Radiologia" },
-      { termo: "ultrassom", nome: "Ultrassonografia" },
-      { termo: "medicina do trabalho", nome: "Medicina do Trabalho" }
-    ];
-    for (var k = 0; k < outrasEspecialidades.length; k++) {
-      if (textoBusca.indexOf(outrasEspecialidades[k].termo) !== -1) {
-        return outrasEspecialidades[k].nome;
-      }
-    }
-
-    return "Não Especificado";
-  }
-
-  function _extrairValorFinanceiro(raw, norm) {
-    // 1. Padrão explícito com R$ (ex: R$ 1.560,00 | R$1500 | R$ 950)
-    var mReais = raw.match(/R\$\s*([0-9]{1,2}\.[0-9]{3}|[0-9]{3,4})(?:,[0-9]{2})?/i);
-    if (mReais && mReais[1]) {
-      var v1 = parseInt(mReais[1].replace(/\./g, ""), 10);
-      if (v1 >= 400 && v1 <= 15000) return v1;
-    }
-
-    // 2. Padrão precedido por palavras-chave financeiras mesmo sem R$ (ex: "Valor: 1.500", "Paga 1.450,00", "Cache: 1600")
-    var mContexto = raw.match(/(?:valor|paga|pagamento|remuneracao|remuneração|cache|cachê|liquido|líquido|pix|pj)[\s:;\-R$]*([0-9]{1,2}\.[0-9]{3}|[0-9]{3,4})(?:,[0-9]{2})?/i);
-    if (mContexto && mContexto[1]) {
-      var v2 = parseInt(mContexto[1].replace(/\./g, ""), 10);
-      if (v2 >= 400 && v2 <= 15000) return v2;
-    }
-
-    // 3. Padrão milhar formatado com ponto e/ou centavos (ex: "1.500,00" ou "1.600 no PIX")
-    var mMilhar = raw.match(/\b([1-9]\.[0-9]{3})(?:,[0-9]{2})?\b/);
-    if (mMilhar && mMilhar[1]) {
-      var v3 = parseInt(mMilhar[1].replace(/\./g, ""), 10);
-      if (v3 >= 1000 && v3 <= 9999) return v3;
-    }
-
-    // 4. Número inteiro de 3 ou 4 dígitos (400 a 6000) que não seja ano ou telefone
-    var regexNumeros = /\b([4-9][0-9]{2}|[1-5][0-9]{3})(?:,[0-9]{2})?\b/g;
-    var match;
-    while ((match = regexNumeros.exec(raw)) !== null) {
-      var candidato = parseInt(match[1], 10);
-      var pos = match.index;
-      var vizinhanca = raw.slice(Math.max(0, pos - 6), Math.min(raw.length, pos + match[0].length + 6)).toLowerCase();
-      // Ignora se faz parte de horário (ex: 1900h) ou telefone com traço
-      if (vizinhanca.indexOf("-") !== -1 && /\d{4}-\d{4}/.test(vizinhanca)) continue;
-      if (candidato >= 1990 && candidato <= 2035 && norm.indexOf("valor") === -1) continue;
-      if (candidato >= 400 && candidato <= 6000) {
-        return candidato;
-      }
-    }
-
-    return 0;
-  }
-
-  function _extrairDataETurno(raw, norm) {
-    var ehNoturno =
-      norm.indexOf("noturno") !== -1 ||
-      norm.indexOf("19h as 07h") !== -1 ||
-      norm.indexOf("19h as 7h") !== -1 ||
-      norm.indexOf("19:00") !== -1 ||
-      norm.indexOf("19h") !== -1 ||
-      norm.indexOf("18h as 06h") !== -1 ||
-      norm.indexOf("noite") !== -1;
-
-    var ehCinderela = norm.indexOf("cinderela") !== -1 || norm.indexOf("19h as 01h") !== -1 || norm.indexOf("18h as 00h") !== -1;
-    var sufixoTurno = (ehNoturno || ehCinderela) ? "NOITE" : "DIA";
-
-    var prefixoDia = "HOJE";
-    var dataExplicitaIso = null;
-
-    // 1. Verifica data explícita DD/MM ou DD/MM/YYYY
-    var mDataBarra = raw.match(/\b([0-3]?[0-9])\/([0-1]?[0-9])(?:\/(20[2-9][0-9]|[2-9][0-9]))?\b/);
-    if (mDataBarra) {
-      var dia = parseInt(mDataBarra[1], 10);
-      var mes = parseInt(mDataBarra[2], 10);
-      var hoje = new Date();
-      var ano = mDataBarra[3]
-        ? (mDataBarra[3].length === 2 ? 2000 + parseInt(mDataBarra[3], 10) : parseInt(mDataBarra[3], 10))
-        : hoje.getFullYear();
-
-      if (dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12) {
-        var dataCand = new Date(ano, mes - 1, dia);
-        // Se a data sem ano já passou há mais de 2 dias, assume próximo ano
-        if (!mDataBarra[3] && (hoje.getTime() - dataCand.getTime()) > 2 * 86400000) {
-          ano += 1;
-        }
-        var mm = String(mes).padStart(2, "0");
-        var dd = String(dia).padStart(2, "0");
-        dataExplicitaIso = ano + "-" + mm + "-" + dd;
-        prefixoDia = dd + "/" + mm;
-      }
-    }
-
-    // 2. Verifica data por extenso (ex: "15 de maio", "22 de agosto")
-    // Ignora nomes de hospitais e logradouros (ex: "Hospital 9 de Julho", "Av. 9 de Julho")
-    if (!dataExplicitaIso) {
-      var normSemLocais = norm.replace(/\b(hospital|hosp|clinica|upa|ubs|av|avenida|rua|alameda)\s+[0-3]?[0-9]\s+de\s+[a-z]+/g, "");
-      var mapaMeses = {
-        janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
-        julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12
-      };
-      var mExtenso = normSemLocais.match(/\b([0-3]?[0-9])\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/);
-      if (mExtenso) {
-        var dExt = parseInt(mExtenso[1], 10);
-        var mExt = mapaMeses[mExtenso[2]];
-        if (dExt >= 1 && dExt <= 31 && mExt) {
-          var anoExt = new Date().getFullYear();
-          var mmExt = String(mExt).padStart(2, "0");
-          var ddExt = String(dExt).padStart(2, "0");
-          dataExplicitaIso = anoExt + "-" + mmExt + "-" + ddExt;
-          prefixoDia = ddExt + "/" + mmExt;
-        }
-      }
-    }
-
-    // 3. Verifica palavras-chave de dia relativo ou dia da semana
-    if (!dataExplicitaIso) {
-      if (norm.indexOf("amanha") !== -1) {
-        prefixoDia = "AMANHA";
-      } else if (norm.indexOf("segunda") !== -1) {
-        prefixoDia = "SEGUNDA";
-      } else if (norm.indexOf("terca") !== -1) {
-        prefixoDia = "TERCA";
-      } else if (norm.indexOf("quarta") !== -1) {
-        prefixoDia = "QUARTA";
-      } else if (norm.indexOf("quinta") !== -1) {
-        prefixoDia = "QUINTA";
-      } else if (norm.indexOf("sexta") !== -1) {
-        prefixoDia = "SEXTA";
-      } else if (norm.indexOf("sabado") !== -1) {
-        prefixoDia = "SABADO";
-      } else if (norm.indexOf("domingo") !== -1) {
-        prefixoDia = "DOMINGO";
-      }
-    }
-
-    var horarioInicio = ehNoturno ? "19:00" : "07:00";
-    var horarioFim = ehCinderela ? "01:00" : (ehNoturno ? "07:00" : "19:00");
-    var chaveTurno = (dataExplicitaIso || prefixoDia) + "_" + sufixoTurno;
-
-    return {
-      prefixoDia: prefixoDia,
-      sufixoTurno: sufixoTurno,
-      dataExplicitaIso: dataExplicitaIso,
-      dataTurnoChave: chaveTurno,
-      horarioInicio: horarioInicio,
-      horarioFim: horarioFim,
-      horarioDescricao: prefixoDia + " (" + horarioInicio + " às " + horarioFim + ")"
-    };
-  }
-
-  function extrairDadosPlantao(texto, remetenteNumero) {
-    var raw = String(texto || "").trim();
-    var norm = _normalizarTexto(raw);
-
-    // 1. Hospital / Unidade (Suporta números como "Hospital 9 de Julho", "UPA 24h" e apóstrofos "D'Ávila", sem engolir quebras de linha)
-    var hospital = "Unidade Médica (Grupo)";
-    var regexHosp = /(?:📍[ \t]*)?((?:hospital|upa|ama|ubs|pronto[ \t]+socorro|pronto[ \t]+atendimento|santa[ \t]+casa|maternidade|instituto|clinica|clínica)[ \t]+[a-zA-Z0-9áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ'’.\-]+(?:[ \t]+[a-zA-Z0-9áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ'’.\-]+){0,6})/i;
-    var mHosp = raw.match(regexHosp);
-    if (mHosp && mHosp[1]) {
-      var hospBruto = mHosp[1].split(/[\(\n\r•|,;:]/)[0].trim();
-      // Remove sufixos acidentais de turno/setor caso estejam na mesma linha sem pontuação
-      hospBruto = hospBruto.replace(/\s+(?:-\s*)?(?:hoje|amanha|amanhã|noturno|diurno|porta|ficha\s+verde|valor|r\$).*$/i, "").trim();
-      if (hospBruto.length >= 4) {
-        hospital = hospBruto;
-      }
-    }
-
-    // 2. Cidade / Região
-    var cidade = "São Paulo";
-    var mapaCidades = [
-      { chave: "sao bernardo", nome: "São Bernardo" },
-      { chave: "santo andre", nome: "Santo André" },
-      { chave: "sao caetano", nome: "São Caetano" },
-      { chave: "diadema", nome: "Diadema" },
-      { chave: "maua", nome: "Mauá" },
-      { chave: "abc", nome: "ABC" },
-      { chave: "osasco", nome: "Osasco" },
-      { chave: "guarulhos", nome: "Guarulhos" },
-      { chave: "barueri", nome: "Barueri" },
-      { chave: "alphaville", nome: "Barueri" },
-      { chave: "cotia", nome: "Cotia" },
-      { chave: "taboao da serra", nome: "Taboão da Serra" },
-      { chave: "taboao", nome: "Taboão da Serra" },
-      { chave: "mogi das cruzes", nome: "Mogi das Cruzes" },
-      { chave: "mogi", nome: "Mogi das Cruzes" },
-      { chave: "santos", nome: "Santos" },
-      { chave: "sao vicente", nome: "São Vicente" },
-      { chave: "praia grande", nome: "Praia Grande" },
-      { chave: "guaruja", nome: "Guarujá" },
-      { chave: "campinas", nome: "Campinas" },
-      { chave: "jundiai", nome: "Jundiaí" },
-      { chave: "sorocaba", nome: "Sorocaba" },
-      { chave: "ribeirao preto", nome: "Ribeirão Preto" },
-      { chave: "sao jose dos campos", nome: "São José dos Campos" },
-      { chave: "sjc", nome: "São José dos Campos" },
-      { chave: "morumbi", nome: "São Paulo" },
-      { chave: "itaim", nome: "São Paulo" },
-      { chave: "paulista", nome: "São Paulo" },
-      { chave: "zona sul", nome: "São Paulo" },
-      { chave: "zona leste", nome: "São Paulo" },
-      { chave: "zona norte", nome: "São Paulo" },
-      { chave: "zona oeste", nome: "São Paulo" },
-      { chave: "sao paulo", nome: "São Paulo" }
-    ];
-    for (var c = 0; c < mapaCidades.length; c++) {
-      if (norm.indexOf(mapaCidades[c].chave) !== -1) {
-        cidade = mapaCidades[c].nome;
-        break;
-      }
-    }
-    if (cidade === "São Paulo") {
-      var catalogoDinamico = obterCatalogoCidadesDisponiveis();
-      for (var cd = 0; cd < catalogoDinamico.length; cd++) {
-        var cItem = catalogoDinamico[cd];
-        var cItemNorm = _normalizarTexto(cItem);
-        if (cItemNorm && cItemNorm !== "sao paulo" && norm.indexOf(cItemNorm) !== -1) {
-          cidade = cItem;
-          break;
-        }
-      }
-    }
-
-    // 3. Setor / Especialidade (Sem fallback cego para Porta)
-    var setor = _extrairSetorEspecialidade(norm);
-
-    // 4. Turno, Data-Chave e Horários para a Aba Rotina
-    var infoTurno = _extrairDataETurno(raw, norm);
-
-    // 5. Duração (6h, 12h, 24h) - Evita confundir "UPA 24h" com duração de 24h
-    var textoSemUpa24 = raw.replace(/upa\s*24\s*h/gi, "UPA");
-    var duracaoHoras = 12;
-    if (/\b24\s*h(?:oras)?\b/i.test(textoSemUpa24)) {
-      duracaoHoras = 24;
-    } else if (/\b6\s*h(?:oras)?\b/i.test(textoSemUpa24) || norm.indexOf("cinderela") !== -1) {
-      duracaoHoras = 6;
-    }
-
-    // 6. Valor Financeiro (R$)
-    var valorTotal = _extrairValorFinanceiro(raw, norm);
-    var valorHora = duracaoHoras > 0 && valorTotal > 0
-      ? Math.round(valorTotal / duracaoHoras)
-      : 0;
-
-    // 7. Modalidade de Pagamento
-    var modalidadePagamento = "PJ 30 dias";
-    if (norm.indexOf("pix") !== -1 && (norm.indexOf("vista") !== -1 || norm.indexOf("pos plantao") !== -1 || norm.indexOf("pos-plantao") !== -1 || norm.indexOf("saida") !== -1 || norm.indexOf("imediato") !== -1)) {
-      modalidadePagamento = "PIX à vista pós-plantão";
-    } else if (norm.indexOf("pix") !== -1) {
-      modalidadePagamento = "PIX";
-    } else if (norm.indexOf("avista") !== -1 || norm.indexOf("a vista") !== -1) {
-      modalidadePagamento = "À vista";
-    }
-
-    // 8. Contato do Escalista Sanitizado (Sem fallback fake 5511999990000)
-    var contatoEscalista = "";
-    var mTel = raw.match(/(?:\+?55[ \t\-]?)?(?:\(?0?[1-9]{2}\)?[ \t\-]?)(?:9[0-9]{4}[ \t\-]?[0-9]{4}|[2-9][0-9]{3}[ \t\-]?[0-9]{4})/);
-    if (mTel && mTel[0]) {
-      contatoEscalista = _sanitizarTelefoneWhatsApp(mTel[0]);
-    }
-    if (!contatoEscalista && remetenteNumero) {
-      contatoEscalista = _sanitizarTelefoneWhatsApp(remetenteNumero);
-    }
-
-    var ofertaMontada = {
-      ehOfertaValida: valorTotal >= 400,
-      hospital: hospital,
-      cidade: cidade,
-      setor: setor,
-      dataTurnoChave: infoTurno.dataTurnoChave,
-      dataIsoResolvida: _resolverDataIsoParaTurno(infoTurno.dataTurnoChave),
-      horarioInicio: infoTurno.horarioInicio,
-      horarioFim: infoTurno.horarioFim,
-      horarioDescricao: infoTurno.horarioDescricao,
-      duracaoHoras: duracaoHoras,
-      valorTotal: valorTotal,
-      valorHora: valorHora,
-      modalidadePagamento: modalidadePagamento,
-      contatoEscalista: contatoEscalista,
-      textoOriginal: raw
-    };
-
-    ofertaMontada.hashOferta = gerarHashOferta(ofertaMontada);
-    return ofertaMontada;
-  }
-
-  // --------------------------------------------------------------------------
-  // ESTÁGIO 3: Integração Viva com a Aba Rotina (Trava de Conflito + Injeção)
-  // --------------------------------------------------------------------------
-  function _resolverDataIsoParaTurno(dataTurnoChave) {
-    var chave = String(dataTurnoChave || "HOJE_NOITE").toUpperCase();
-    var prefixo = chave.split("_")[0];
-
-    // Se já veio como YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(prefixo)) {
-      return prefixo;
-    }
-
-    var base = new Date();
-
-    // Se veio como DD/MM
-    var mCurto = prefixo.match(/^(\d{2})\/(\d{2})$/);
-    if (mCurto) {
-      var d = parseInt(mCurto[1], 10);
-      var m = parseInt(mCurto[2], 10);
-      var y = base.getFullYear();
-      return y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0");
-    }
-
-    var mapaDiasSemana = {
-      DOMINGO: 0,
-      SEGUNDA: 1,
-      TERCA: 2,
-      QUARTA: 3,
-      QUINTA: 4,
-      SEXTA: 5,
-      SABADO: 6
-    };
-
-    if (prefixo === "AMANHA") {
-      base.setDate(base.getDate() + 1);
-    } else if (Object.prototype.hasOwnProperty.call(mapaDiasSemana, prefixo)) {
-      var diaAlvo = mapaDiasSemana[prefixo];
-      var diff = (diaAlvo - base.getDay() + 7) % 7;
-      base.setDate(base.getDate() + diff);
-    }
-
-    if (typeof RotinaService !== "undefined" && RotinaService.normalizarDataISO) {
-      return RotinaService.normalizarDataISO(base);
-    }
-    var yyyy = base.getFullYear();
-    var mm = String(base.getMonth() + 1).padStart(2, "0");
-    var dd = String(base.getDate()).padStart(2, "0");
-    return yyyy + "-" + mm + "-" + dd;
-  }
-
-  function obterSlotsTravados() {
-    return _lerJsonProp(PROP_LOCKED_SLOTS_KEY, {});
-  }
-
-  function travarSlotPlantao(dataTurnoChave, infoOferta) {
-    var slots = obterSlotsTravados();
-    var oferta = infoOferta || {};
-    slots[dataTurnoChave] = {
-      hospital: oferta.hospital || "Plantão Confirmado",
-      valorTotal: oferta.valorTotal || 0,
-      dataIso: _resolverDataIsoParaTurno(dataTurnoChave),
-      travadoEm: new Date().toISOString()
-    };
-    _salvarJsonProp(PROP_LOCKED_SLOTS_KEY, slots);
-    return slots;
-  }
-
-  function liberarSlotPlantao(dataTurnoChave) {
-    if (!dataTurnoChave) {
-      _salvarJsonProp(PROP_LOCKED_SLOTS_KEY, {});
-      return {};
-    }
-    var slots = obterSlotsTravados();
-    if (Object.prototype.hasOwnProperty.call(slots, dataTurnoChave)) {
-      delete slots[dataTurnoChave];
-      _salvarJsonProp(PROP_LOCKED_SLOTS_KEY, slots);
-    }
-    return slots;
-  }
-
-  function destravarTodaAgendaSniper() {
-    _salvarJsonProp(PROP_LOCKED_SLOTS_KEY, {});
-    try {
-      if (typeof RotinaService !== "undefined" && RotinaService.obterBlocosDoDia && RotinaService.salvarBlocosDoDia) {
-        var hojeIso = _resolverDataIsoParaTurno("HOJE_NOITE");
-        var blocos = RotinaService.obterBlocosDoDia(hojeIso) || [];
-        var limpos = [];
-        for (var i = 0; i < blocos.length; i++) {
-          if (!blocos[i].id || String(blocos[i].id).indexOf("plantao_sniper_") === -1) {
-            limpos.push(blocos[i]);
-          }
-        }
-        RotinaService.salvarBlocosDoDia(hojeIso, limpos);
-      }
-    } catch (e) {}
-    return true;
-  }
-
-  function verificarConflitoNaRotina(oferta) {
-    var chave = oferta.dataTurnoChave || "HOJE_NOITE";
-    var slots = obterSlotsTravados();
-    if (slots[chave]) {
-      return {
-        conflito: true,
-        origem: "TRAVA_SNIPER",
-        motivo: "Horário já preenchido por " + slots[chave].hospital + " (" + chave + ")"
-      };
-    }
-
-    // Consulta real na Timeline da Aba Rotina do médico
-    try {
-      if (typeof RotinaService !== "undefined" && RotinaService.obterBlocosDoDia) {
-        var dataIso = _resolverDataIsoParaTurno(chave);
-        var blocos = RotinaService.obterBlocosDoDia(dataIso) || [];
-        for (var i = 0; i < blocos.length; i++) {
-          var b = blocos[i];
-          if (b && b.categoria === "plantao" && b.status !== "ignorado") {
-            var mesmoTurno =
-              b.inicio === oferta.horarioInicio ||
-              (chave.indexOf("NOITE") !== -1 && String(b.inicio) >= "18:00") ||
-              (chave.indexOf("DIA") !== -1 && String(b.inicio) < "13:00");
-            if (mesmoTurno) {
-              return {
-                conflito: true,
-                origem: "ABA_ROTINA",
-                motivo: "Conflito na Timeline da Aba Rotina (" + dataIso + "): " + b.titulo
-              };
-            }
-          }
-        }
-      }
-    } catch (e) {}
-
-    return { conflito: false };
-  }
-
-  function agendarPlantaoCapturadoNaRotina(oferta) {
-    if (!oferta) return { agendado: false };
-    var dataIso = _resolverDataIsoParaTurno(oferta.dataTurnoChave);
-    travarSlotPlantao(oferta.dataTurnoChave, oferta);
-
-    try {
-      if (typeof RotinaService !== "undefined" && RotinaService.obterBlocosDoDia && RotinaService.salvarBlocosDoDia) {
-        var blocos = RotinaService.obterBlocosDoDia(dataIso) || [];
-        var idBloco = "plantao_sniper_" + (oferta.hashOferta || Date.now());
-        var jaExiste = false;
-        for (var i = 0; i < blocos.length; i++) {
-          if (blocos[i].id === idBloco) {
-            jaExiste = true;
-            break;
-          }
-        }
-        if (!jaExiste) {
-          blocos.push({
-            id: idBloco,
-            inicio: oferta.horarioInicio || "19:00",
-            fim: oferta.horarioFim || "07:00",
-            titulo: "🚨 Plantão " + oferta.hospital + " (" + oferta.setor + ")",
-            categoria: "plantao",
-            status: "pendente",
-            nota: "Capturado via Sniper | R$ " + oferta.valorTotal + " (" + oferta.modalidadePagamento + ")"
-          });
-          RotinaService.salvarBlocosDoDia(dataIso, blocos);
-        }
-        return { agendado: true, dataIso: dataIso, idBloco: idBloco };
-      }
-    } catch (e) {}
-
-    return { agendado: true, dataIso: dataIso };
-  }
-
-  // --------------------------------------------------------------------------
-  // Validador de Critérios do Médico (Setor, Cidade, Piso e Agenda)
-  // --------------------------------------------------------------------------
-  function avaliarCriteriosMedico(oferta, config) {
-    // 1. Verifica Blacklist Anti-Calote
-    var checkCalote = verificarBlacklist(oferta.hospital + " " + oferta.textoOriginal);
-    if (checkCalote.bloqueado) {
-      return {
-        aprovado: false,
-        codigo: "BLACKLIST_CALOTE",
-        motivo: "Bloqueado pelo Filtro Anti-Calote: " + checkCalote.termo + " (" + checkCalote.motivo + ")"
-      };
-    }
-
-    // 2. Verifica Setor / Especialidade Compatível
-    var setorNorm = _normalizarTexto(oferta.setor);
-    var setoresOk = Array.isArray(config.setoresPermitidos)
-      ? config.setoresPermitidos
-      : DEFAULT_CONFIG.setoresPermitidos;
-
-    var setorPermitido = false;
-    for (var i = 0; i < setoresOk.length; i++) {
-      var sPermNorm = _normalizarTexto(setoresOk[i]);
-      if (!sPermNorm) continue;
-      if (setorNorm === sPermNorm || setorNorm.indexOf(sPermNorm) !== -1 || sPermNorm.indexOf(setorNorm) !== -1) {
-        setorPermitido = true;
-        break;
-      }
-    }
-
-    if (!setorPermitido) {
-      return {
-        aprovado: false,
-        codigo: "SETOR_INCOMPATIVEL",
-        motivo: "Setor/Especialidade '" + oferta.setor + "' fora dos setores habilitados (" + setoresOk.join(", ") + ")"
-      };
-    }
-
-    // 3. Abrangência Geográfica (Opcional se filtroCidadesAtivo estiver ligado)
-    if (config.filtroCidadesAtivo && Array.isArray(config.cidadesPermitidas) && config.cidadesPermitidas.length > 0) {
-      var cidNorm = _normalizarTexto(oferta.cidade);
-      var cidadesOk = config.cidadesPermitidas;
-      var cidadePermitida = false;
-      for (var j = 0; j < cidadesOk.length; j++) {
-        if (cidNorm.indexOf(_normalizarTexto(cidadesOk[j])) !== -1) {
-          cidadePermitida = true;
-          break;
-        }
-      }
-      if (!cidadePermitida) {
-        return {
-          aprovado: false,
-          codigo: "CIDADE_FORA_DO_RAIO",
-          motivo: "Cidade '" + oferta.cidade + "' fora do raio configurado"
-        };
-      }
-    }
-
-    // 4. Verifica Piso Financeiro (Proporcional à duração ou valor/hora)
-    var piso12h = Number(config.valorMinimo12h) || 1300;
-    var pisoHora = Number(config.valorMinimoHora) || Math.round(piso12h / 12);
-    if (oferta.valorHora < pisoHora) {
-      return {
-        aprovado: false,
-        codigo: "VALOR_ABAIXO_DO_PISO",
-        motivo: "R$ " + oferta.valorTotal + " (R$ " + oferta.valorHora + "/h) abaixo do seu piso de R$ " + piso12h + "/12h (R$ " + pisoHora + "/h)"
-      };
-    }
-
-    // 5. Verifica Conflito na Aba Rotina e Trava de Agenda
-    var conflito = verificarConflitoNaRotina(oferta);
-    if (conflito.conflito) {
-      return {
-        aprovado: false,
-        codigo: "CONFLITO_AGENDA_ROTINA",
-        motivo: conflito.motivo
-      };
-    }
-
-    return { aprovado: true, codigo: "MATCH_PERFEITO" };
-  }
-
-  // --------------------------------------------------------------------------
-  // ESTÁGIO 4: Executor Stealth Anti-Ban (Jitter Humano + Spintax + PV)
-  // --------------------------------------------------------------------------
-  function gerarDisparoStealthWhatsApp(oferta, config, grupoOrigem) {
-    var cfg = config || obterConfigSniper();
-    var frasesGrupo = [
-      "Opa, disponível! Chamei no privado agora.",
-      "Eu pego! Te mandei msg no PV.",
-      "Disponível, chamei no privado para confirmar.",
-      "Assumo a vaga! Enviei meus dados no seu privado."
-    ];
-    var idx = Math.floor(Math.random() * frasesGrupo.length);
-    var jitterMs = 1850 + Math.floor(Math.random() * 1300); // 1.85s a 3.15s
-
-    var msgPrivado =
-      "Olá! Vi a vaga no grupo *" + (grupoOrigem || oferta.grupoOrigem || "Plantões") + "* para o *" + oferta.hospital + "* (" + oferta.horarioDescricao + " — " + oferta.setor + ").\n\n" +
-      "Tenho disponibilidade imediata para assumir. Seguem meus dados para cadastro na escala:\n" +
-      "👨‍⚕️ *" + cfg.nome + "* (" + cfg.crm + ")\n" +
-      "Pode confirmar a vaga para mim, por favor?";
-
-    var foneLimpo = _sanitizarTelefoneWhatsApp(oferta.contatoEscalista);
-    var linkWa = foneLimpo
-      ? ("https://wa.me/" + foneLimpo + "?text=" + encodeURIComponent(msgPrivado))
-      : null;
-
-    return {
-      modoStealthPvOnly: !!cfg.responderApenasPv,
-      jitterDelayMs: jitterMs,
-      simulacaoDigitandoMs: 1400,
-      mensagemGrupo: cfg.responderApenasPv ? null : frasesGrupo[idx],
-      destinatarioPv: foneLimpo || null,
-      destinatarioJidPv: foneLimpo ? (foneLimpo + "@s.whatsapp.net") : null,
-      temContatoValido: !!foneLimpo,
-      mensagemPrivado: msgPrivado,
-      linkWhatsAppDireto: linkWa
-    };
-  }
-
-  // --------------------------------------------------------------------------
-  // Pipeline Completo: Processa Mensagem do Grupo WhatsApp
-  // --------------------------------------------------------------------------
-  function processarMensagemGrupoWhatsApp(texto, grupoNome, remetenteNumero, opcoes) {
-    var opts = (grupoNome && typeof grupoNome === "object") ? grupoNome : (opcoes || {});
-    var nomeGrp = (typeof grupoNome === "string") ? grupoNome : (opts.grupoNome || opts.groupName || "Grupo WhatsApp");
-    var remNum = (typeof remetenteNumero === "string") ? remetenteNumero : (opts.escalistaFone || opts.remetenteNumero || opts.participant || "");
-    var cfgGlobal = obterConfigSniper();
-
-    // Estágio 0: Blindagem Zero-Trust em Dupla Camada (Camada 1: Privados/Status/FromMe + Camada 2: Allowlist)
-    var exigirAllowlist = typeof opts.exigirAllowlist === "boolean"
-      ? opts.exigirAllowlist
-      : (cfgGlobal.exigirAllowlist !== false);
-
-    var isolamento = validarIsolamentoCamada1E2({
-      fromMe: opts.fromMe,
-      remoteJid: opts.remoteJid || opts.groupJid || "",
-      grupoNome: nomeGrp,
-      exigirAllowlist: exigirAllowlist
-    });
-
-    if (!isolamento.permitido) {
-      return {
-        status: "BLOQUEADA_ISOLAMENTO_ZERO_TRUST",
-        camada: isolamento.camada,
-        codigo: isolamento.codigo,
-        motivo: isolamento.motivo,
-        remoteJid: isolamento.remoteJid || null
-      };
-    }
-
-    var stats = obterEstatisticas();
-    stats.totalAnalisadas += 1;
-
-    // Estágio 1: Filtro 0ms
-    var f1 = filtroRapidoEstagio1(texto);
-    if (!f1.passou) {
-      stats.filtradasEstagio1 += 1;
-      salvarEstatisticas(stats);
-      return {
-        status: "DESCARTADA_ESTAGIO_1",
-        codigo: f1.motivo,
-        motivo: f1.motivo,
-        hashOferta: f1.hashOferta || null
-      };
-    }
-
-    // Estágio 2: Extração Semântica
-    var oferta = extrairDadosPlantao(texto, remNum);
-    oferta.grupoOrigem = isolamento.nomeGrupo || nomeGrp || "Grupo WhatsApp";
-    oferta.grupoJid = isolamento.remoteJid || opts.remoteJid || "";
-
-    if (!oferta.ehOfertaValida) {
-      stats.filtradasEstagio1 += 1;
-      salvarEstatisticas(stats);
-      return {
-        status: "DESCARTADA_EXTRATOR",
-        codigo: "SEM_VALOR_VALIDO",
-        motivo: "Sem valor financeiro válido identificado (>= R$ 400)",
-        oferta: oferta
-      };
-    }
-
-    // Estágio 3: Critérios + Blacklist + Aba Rotina
-    var avaliacao = avaliarCriteriosMedico(oferta, cfgGlobal);
-    if (!avaliacao.aprovado) {
-      stats.rejeitadasCriterios = (Number(stats.rejeitadasCriterios) || 0) + 1;
-      if (avaliacao.codigo === "BLACKLIST_CALOTE") {
-        stats.calotesEvitados += 1;
-      }
-      salvarEstatisticas(stats);
-      _registrarNoHistorico({
-        status: "REJEITADA_CRITERIOS",
-        codigo: avaliacao.codigo,
-        motivo: avaliacao.motivo,
-        hospital: oferta.hospital,
-        setor: oferta.setor,
-        valorTotal: oferta.valorTotal,
-        grupo: oferta.grupoOrigem
-      });
-      return {
-        status: "REJEITADA_CRITERIOS",
-        codigo: avaliacao.codigo,
-        motivo: avaliacao.motivo,
-        oferta: oferta
-      };
-    }
-
-    // Estágio 4: Match Perfeito! Respeita a permissão individual do grupo (RADAR_ONLY vs SNIPER_AUTO)
-    salvarOfertaEmMemoria(oferta);
-    var stealth = gerarDisparoStealthWhatsApp(oferta, cfgGlobal, oferta.grupoOrigem);
-    var agendamentoRotina = null;
-
-    var grupoPermiteDisparoAuto = isolamento.modoGrupo !== "RADAR_ONLY";
-    var executarAuto = cfgGlobal.modoOperacao === "SNIPER_AUTO" && grupoPermiteDisparoAuto;
-
-    if (executarAuto) {
-      stats.plantoesCapturados += 1;
-      stats.receitaGarantidaReais += Number(oferta.valorTotal) || 0;
-      stats.ultimoDisparoEm = new Date().toISOString();
-      if (cfgGlobal.autoAgendarRotina) {
-        agendamentoRotina = agendarPlantaoCapturadoNaRotina(oferta);
-      }
-    }
-    salvarEstatisticas(stats);
-
-    var statusFinal = executarAuto ? "CAPTURADA_SNIPER_AUTO" : "AGUARDANDO_APROVACAO_SEMI_AUTO";
-    _registrarNoHistorico({
-      status: statusFinal,
-      codigo: "MATCH_PERFEITO",
-      hashOferta: oferta.hashOferta,
-      hospital: oferta.hospital,
-      cidade: oferta.cidade,
-      setor: oferta.setor,
-      valorTotal: oferta.valorTotal,
-      grupo: oferta.grupoOrigem
-    });
-
-    var targetChatId = opts.notificarTelegramChatId || opts.chatId;
-    if (targetChatId) {
-      enviarCardVagaTelegram(targetChatId, oferta, cfgGlobal, stealth, agendamentoRotina, executarAuto);
-    }
-
-    return {
-      status: statusFinal,
-      codigo: "MATCH_PERFEITO",
-      modoGrupoAplicado: isolamento.modoGrupo,
-      oferta: oferta,
-      stealth: stealth,
-      agendamentoRotina: agendamentoRotina
-    };
-  }
-
-  // --------------------------------------------------------------------------
-  // Confirmação 1-Click (Modo Semi-Auto / Botão Claim no Telegram)
-  // --------------------------------------------------------------------------
-  function confirmarCapturaSemiAuto(hashOferta) {
-    var oferta = obterOfertaEmMemoria(hashOferta);
-    if (!oferta) {
-      return {
-        sucesso: false,
-        motivo: "VAGA_EXPIRADA_MEMORIA"
-      };
-    }
-
-    var cfg = obterConfigSniper();
-    var agendamento = agendarPlantaoCapturadoNaRotina(oferta);
-    var stealth = gerarDisparoStealthWhatsApp(oferta, cfg, oferta.grupoOrigem);
-
-    var stats = obterEstatisticas();
-    stats.plantoesCapturados += 1;
-    stats.receitaGarantidaReais += Number(oferta.valorTotal) || 0;
-    stats.ultimoDisparoEm = new Date().toISOString();
-    salvarEstatisticas(stats);
-
-    // Se o Bridge WhatsApp estiver ativo no runtime, enfileira o disparo real para o escalista
-    var disparoBridge = false;
-    if (typeof globalThis !== "undefined" && globalThis.WhatsAppBridgeService && typeof globalThis.WhatsAppBridgeService.dispararCapturaSniper === "function") {
-      try {
-        globalThis.WhatsAppBridgeService.dispararCapturaSniper(oferta, stealth);
-        disparoBridge = true;
-      } catch (e) {}
-    }
-
-    return {
-      sucesso: true,
-      oferta: oferta,
-      agendamentoRotina: agendamento,
-      stealth: stealth,
-      disparoBridgeExecutado: disparoBridge
-    };
-  }
-
-  // --------------------------------------------------------------------------
-  // Notificação Rica no Telegram (Card de Vaga + Botões 1-Click)
-  // --------------------------------------------------------------------------
-  function enviarCardVagaTelegram(chatId, oferta, config, stealth, agendamentoRotina, foiExecutadoAuto) {
-    if (!chatId || typeof enviarMensagemComTecladoParaChat !== "function") return;
-    var ehAuto = typeof foiExecutadoAuto === "boolean"
-      ? foiExecutadoAuto
-      : (config.modoOperacao === "SNIPER_AUTO");
-
-    var cabecalho = ehAuto
-      ? "🎯 *PLANTÃO CAPTURADO PELO SNIPER!*"
-      : "🔔 *VAGA FILÉ DETECTADA (MODO 1-CLICK)*";
-
-    var statusStealth = ehAuto
-      ? (config.responderApenasPv
-          ? "🕵️ *Stealth Fantasma:* Mensagem enviada direto no PV do escalista (`" + stealth.jitterDelayMs + "ms`)"
-          : "⚡ *Disparo Duplo:* Respondido no grupo + PV do escalista (`" + stealth.jitterDelayMs + "ms`)")
-      : "⏳ *Aguardando seu clique abaixo para disparar e agendar na Rotina.*";
-
-    var linhaRotina = agendamentoRotina && agendamentoRotina.agendado
-      ? "✅ *Aba Rotina:* Bloco de Plantão injetado automaticamente em `" + agendamentoRotina.dataIso + "`!"
-      : "📅 *Aba Rotina:* Sem conflitos no horário (`" + oferta.dataTurnoChave + "`).";
-
-    var linhaContato = stealth && stealth.temContatoValido
-      ? "📞 *Escalista:* `+" + stealth.destinatarioPv + "`"
-      : "📞 *Escalista:* _Contato via grupo (sem telefone explícito)_";
-
-    var msg = [
-      cabecalho,
-      "━━━━━━━━━━━━━━━━━━━━",
-      "🏥 *Unidade:* " + oferta.hospital + " (" + oferta.cidade + ")",
-      "🩺 *Setor:* " + oferta.setor,
-      "🕒 *Turno:* " + oferta.horarioDescricao + " (" + oferta.duracaoHoras + "h)",
-      "💰 *Valor:* *R$ " + oferta.valorTotal + "* (`R$ " + oferta.valorHora + "/h` — " + oferta.modalidadePagamento + ")",
-      "📱 *Grupo:* " + (oferta.grupoOrigem || "Plantões Médicos SP"),
-      linhaContato,
-      "",
-      statusStealth,
-      linhaRotina
-    ].join("\n");
-
-    var botoes = [];
-    if (!ehAuto) {
-      botoes.push([
-        {
-          text: "⚡ Pegar Vaga + Agendar na Rotina",
-          callback_data: "sniper:claim:" + oferta.hashOferta
-        }
-      ]);
-    }
-    if (stealth && stealth.linkWhatsAppDireto) {
-      botoes.push([
-        {
-          text: "💬 Abrir WhatsApp do Escalista",
-          url: stealth.linkWhatsAppDireto
-        }
-      ]);
-    }
-    botoes.push([
-      {
-        text: "🚫 Denunciar Calote",
-        callback_data: "sniper:denunciar:" + String(oferta.hospital).slice(0, 28)
-      },
-      {
-        text: "🎛️ Painel Sniper",
-        callback_data: "sniper:painel"
-      }
-    ]);
-
-    enviarMensagemComTecladoParaChat(chatId, msg, { inline_keyboard: botoes });
-  }
-
-  // --------------------------------------------------------------------------
-  // Simulador Integrado de 8 Vagas Reais (Teste Ponta a Ponta no Telegram)
-  // --------------------------------------------------------------------------
-  function executarSimulacaoSniper(chatId) {
-    destravarTodaAgendaSniper();
-
-    var bateria = [
-      {
-        grupo: "Plantões Premium SP & ABC",
-        remoteJid: "120363011111111@g.us",
-        remetente: "5511991112222",
-        texto: "Bom dia colegas! Alguém sabe se o estacionamento do Hospital Municipal está funcionando hoje?"
-      },
-      {
-        grupo: "Plantões Premium SP & ABC",
-        remoteJid: "120363011111111@g.us",
-        remetente: "5511992223333",
-        texto: "Olá pessoal, estou disponível para plantão hoje à noite ou amanhã diurno em SP ou ABC. CRM/SP ativo!"
-      },
-      {
-        grupo: "Plantões Premium SP & ABC",
-        remoteJid: "120363011111111@g.us",
-        remetente: "5511993334444",
-        texto: "🚨 VAGA URGENTE HOJE NOTURNO (19h às 07h) - UPA Fantasma Sul (São Paulo). Porta Ficha Verde. Valor: R$ 1.600 no PIX! Chamar 11993334444"
-      },
-      {
-        grupo: "Plantões Grande SP",
-        remoteJid: "120363022222222@g.us",
-        remetente: "5511994445555",
-        texto: "Preciso de médico para cobertura HOJE NOTURNO 19h às 07h - AMA Zona Leste (São Paulo) - Porta Clínica Médica - Valor R$ 950 PJ."
-      },
-      {
-        grupo: "Plantões Premium SP & ABC",
-        remoteJid: "120363011111111@g.us",
-        remetente: "5511995556666",
-        texto: "Vaga HOJE NOTURNO 19h às 07h - Hospital Santa Marcelina (São Paulo) - Setor: ORTOPEDIA / TRAUMA. Valor: 1.700,00. Contato: 11995556666"
-      },
-      {
-        grupo: "Plantões Premium SP & ABC",
-        remoteJid: "120363011111111@g.us",
-        remetente: "5511988887777",
-        texto: "🔥 COBERTURA HOJE NOTURNO (19h às 07h - 12h)\n📍 Hospital 9 de Julho (São Paulo)\n🩺 Setor: Pronto Atendimento / Ficha Verde (Porta)\n💰 Valor: R$ 1.560,00 (PIX à vista pós-plantão)\n📲 Interessados chamar escalista: (11) 98888-7777"
-      },
-      {
-        grupo: "Plantões Grande SP",
-        remoteJid: "120363022222222@g.us",
-        remetente: "5511988887777",
-        texto: "🔥 COBERTURA HOJE NOTURNO (19h às 07h - 12h)\n📍 Hospital 9 de Julho (São Paulo)\n🩺 Setor: Pronto Atendimento / Ficha Verde (Porta)\n💰 Valor: R$ 1.560,00 (PIX à vista pós-plantão)\n📲 Interessados chamar escalista: (11) 98888-7777"
-      },
-      {
-        grupo: "Plantões Premium SP & ABC",
-        remoteJid: "120363011111111@g.us",
-        remetente: "5511977776666",
-        texto: "Vaga HOJE NOTURNO (19h às 07h) - Hospital Brasil (Santo André - ABC). Setor: Porta Clínica Médica. Valor: R$ 1.500 PIX na saída! Chamar 11977776666"
-      }
-    ];
-
-    try {
-      var cache = CacheService.getScriptCache();
-      for (var c = 0; c < bateria.length; c++) {
-        var h = gerarHashOferta(bateria[c].texto);
-        cache.put("SNIPER_DEDUP_" + h, "", 1);
-      }
-    } catch (e) {}
-
-    var logs = [];
-    for (var i = 0; i < bateria.length; i++) {
-      var item = bateria[i];
-      var ehVagaVencedora = i === 5;
-      var res = processarMensagemGrupoWhatsApp(
-        item.texto,
-        item.grupo,
-        item.remetente,
-        {
-          remoteJid: item.remoteJid,
-          exigirAllowlist: false,
-          notificarTelegramChatId: ehVagaVencedora ? chatId : null
-        }
-      );
-      logs.push({
-        indice: i + 1,
-        grupo: item.grupo,
-        status: res.status,
-        codigo: res.codigo || res.status,
-        detalhe: res.motivo || (res.oferta ? res.oferta.hospital + " (R$ " + res.oferta.valorTotal + ")" : "")
-      });
-    }
-
-    return logs;
-  }
-
-  return {
-    // Config
-    obterConfigSniper: obterConfigSniper,
-    obterConfig: obterConfigSniper,
-    salvarConfigSniper: salvarConfigSniper,
-    salvarConfig: salvarConfigSniper,
-    redefinirConfigPadrao: redefinirConfigPadrao,
-
-    // Métricas e Histórico
-    obterEstatisticas: obterEstatisticas,
-    obterMetricas: obterEstatisticas,
-    salvarEstatisticas: salvarEstatisticas,
-    registrarMetrica: registrarMetrica,
-    obterHistorico: obterHistorico,
-    limparHistorico: limparHistorico,
-    obterOfertaEmMemoria: obterOfertaEmMemoria,
-    obterOfertaPorId: obterOfertaEmMemoria,
-
-    // Blacklist Anti-Calote
-    obterBlacklistCalote: obterBlacklistCalote,
-    obterBlacklist: obterBlacklistCalote,
-    adicionarBlacklistCalote: adicionarBlacklistCalote,
-    adicionarTermoBlacklist: adicionarBlacklistCalote,
-    removerTermoBlacklist: removerTermoBlacklist,
-    verificarBlacklist: verificarBlacklist,
-
-    // Allowlist Zero-Trust de Grupos
-    obterGruposAllowlist: obterGruposAllowlist,
-    salvarGruposAllowlist: salvarGruposAllowlist,
-    atualizarStatusGrupoAllowlist: atualizarStatusGrupoAllowlist,
-    sincronizarGruposWhatsApp: sincronizarGruposWhatsApp,
-    alternarPermissaoGrupo: alternarPermissaoGrupo,
-    validarIsolamentoCamada1E2: validarIsolamentoCamada1E2,
-
-    // Setores e Cidades
-    obterCatalogoSetoresDisponiveis: obterCatalogoSetoresDisponiveis,
-    alternarSetorPermitido: alternarSetorPermitido,
-    redefinirSetoresPadrao: redefinirSetoresPadrao,
-    obterCatalogoCidadesDisponiveis: obterCatalogoCidadesDisponiveis,
-    alternarCidadePermitida: alternarCidadePermitida,
-    redefinirCidadesPadrao: redefinirCidadesPadrao,
-    definirTodasCidades: definirTodasCidades,
-
-    // Agenda e Slots
-    obterSlotsTravados: obterSlotsTravados,
-    travarSlotPlantao: travarSlotPlantao,
-    liberarSlotPlantao: liberarSlotPlantao,
-    destravarTodaAgendaSniper: destravarTodaAgendaSniper,
-    verificarConflitoNaRotina: verificarConflitoNaRotina,
-    agendarPlantaoCapturadoNaRotina: agendarPlantaoCapturadoNaRotina,
-
-    // Pipeline e Extração
-    filtroRapidoEstagio1: filtroRapidoEstagio1,
-    extrairDadosPlantao: extrairDadosPlantao,
-    avaliarCriteriosMedico: avaliarCriteriosMedico,
-    gerarDisparoStealthWhatsApp: gerarDisparoStealthWhatsApp,
-    processarMensagemGrupoWhatsApp: processarMensagemGrupoWhatsApp,
-    confirmarCapturaSemiAuto: confirmarCapturaSemiAuto,
-    gerarCodigoPareamentoWhatsApp: gerarCodigoPareamentoWhatsApp,
-    executarSimulacaoSniper: executarSimulacaoSniper
-  };
-})();
-
-// ============================================================================
-// UI TELEGRAM: PAINEL DE COMANDO E CALLBACKS DO SNIPER DE PLANTÕES
-// ============================================================================
-
-function _construirPainelGruposAllowlistTelegram(notaTopo) {
-  var grupos = PlantaoSniperService.obterGruposAllowlist();
-  var liberados = 0;
-  var linhasGrupos = [];
-  var inlineKeyboard = [];
-
-  for (var i = 0; i < grupos.length; i++) {
-    var g = grupos[i];
-    var icone = "🔴 BLOQUEADO";
-    var iconeCurto = "🔴";
-
-    if (g.permitido && g.modoGrupo === "SNIPER_AUTO") {
-      icone = "🟢 SNIPER AUTO (Lê + Responde)";
-      iconeCurto = "🟢 AUTO";
-      liberados++;
-    } else if (g.permitido && g.modoGrupo === "RADAR_ONLY") {
-      icone = "👁️ SÓ RADAR (Apenas Leitura)";
-      iconeCurto = "👁️ RADAR";
-      liberados++;
-    }
-
-    linhasGrupos.push(
-      (i + 1) + ". *" + g.nome + "*\n" +
-      "   └ " + icone + " (`" + g.jid + "`)"
-    );
-
-    var nomeBotao = g.nome.length > 22 ? g.nome.substring(0, 22) + "..." : g.nome;
-    inlineKeyboard.push([
-      {
-        text: iconeCurto + " | " + nomeBotao,
-        callback_data: "sniper:grp_toggle:" + i
-      }
-    ]);
-  }
-
-  inlineKeyboard.push([
-    { text: "🔄 Sincronizar Grupos", callback_data: "sniper:grp_sync" },
-    { text: "🔙 Voltar ao Sniper", callback_data: "sniper:painel" }
-  ]);
-
-  var cabecalho = notaTopo ? "✅ _" + notaTopo + "_\n\n" : "";
-  var texto = [
-    cabecalho + "🛡️ *ALLOWLIST ZERO-TRUST DE GRUPOS WHATSAPP*",
-    "━━━━━━━━━━━━━━━━━━━━",
-    "🔒 *Camada 1 (Hard-Coded):* 100% das conversas privadas (`@s.whatsapp.net`), Status e mensagens próprias são descartadas na memória.",
-    "🛡️ *Camada 2 (Allowlist):* Somente grupos autorizados abaixo são lidos (*" + liberados + "/" + grupos.length + " liberados*).",
-    "📍 *Abrangência:* As cidades são definidas pelos grupos de WhatsApp em que você entrar.",
-    "",
-    "*Toque em um grupo abaixo para alternar o nível de acesso:*",
-    "• 🔴 *BLOQUEADO:* Ignora 100% do grupo.",
-    "• 👁️ *SÓ RADAR:* Lê vagas e avisa no Telegram, mas NUNCA digita no grupo.",
-    "• 🟢 *SNIPER AUTO:* Lê vagas e responde automaticamente quando bater os critérios.",
-    "",
-    linhasGrupos.join("\n\n")
-  ].join("\n");
-
-  return {
-    texto: texto,
-    teclado: { inline_keyboard: inlineKeyboard }
-  };
-}
-
-function _construirPainelSetoresTelegram(notaTopo) {
-  var cfg = PlantaoSniperService.obterConfigSniper();
-  var catalogo = PlantaoSniperService.obterCatalogoSetoresDisponiveis();
-  var ativos = Array.isArray(cfg.setoresPermitidos) ? cfg.setoresPermitidos : [];
-
-  var mapaAtivos = {};
-  for (var a = 0; a < ativos.length; a++) {
-    mapaAtivos[String(ativos[a]).toLowerCase()] = true;
-  }
-
-  var inlineKeyboard = [];
-  var linhaAtual = [];
-
-  for (var i = 0; i < catalogo.length; i++) {
-    var nomeSetor = catalogo[i];
-    var estaAtivo = !!mapaAtivos[String(nomeSetor).toLowerCase()];
-    var labelBotao = (estaAtivo ? "✅ " : "⬜ ") + nomeSetor;
-
-    linhaAtual.push({
-      text: labelBotao,
-      callback_data: "sniper:setor_toggle:" + i
-    });
-
-    if (linhaAtual.length === 2) {
-      inlineKeyboard.push(linhaAtual);
-      linhaAtual = [];
-    }
-  }
-  if (linhaAtual.length > 0) {
-    inlineKeyboard.push(linhaAtual);
-  }
-
-  inlineKeyboard.push([
-    { text: "♻️ Restaurar Padrão", callback_data: "sniper:setor_reset" },
-    { text: "🔙 Voltar ao Sniper", callback_data: "sniper:painel" }
-  ]);
-
-  var cabecalho = notaTopo ? "✅ _" + notaTopo + "_\n\n" : "";
-  var resumoAtivos = ativos.length > 0 ? ativos.join(", ") : "_Nenhum setor selecionado_";
-
-  var texto = [
-    cabecalho + "🩺 *SETORES E ESPECIALIDADES PERMITIDAS*",
-    "━━━━━━━━━━━━━━━━━━━━",
-    "O Sniper aceita exclusivamente ofertas cujo setor esteja marcado com ✅ abaixo.",
-    "Vagas de outras especialidades (ex: Ortopedia, GO, Psiquiatria, UTI) são filtradas e rejeitadas no Estágio 3.",
-    "",
-    "📌 *Ativos agora (" + ativos.length + "):* " + resumoAtivos,
-    "",
-    "👇 *Toque para ativar ou desativar um setor:*"
-  ].join("\n");
-
-  return {
-    texto: texto,
-    teclado: { inline_keyboard: inlineKeyboard }
-  };
-}
-
-function _construirPainelSniperTelegram() {
-  var cfg = PlantaoSniperService.obterConfigSniper();
-  var stats = PlantaoSniperService.obterEstatisticas();
-  var blacklist = PlantaoSniperService.obterBlacklistCalote();
-  var gruposAllowlist = PlantaoSniperService.obterGruposAllowlist();
-  var qtdLiberados = 0;
-  for (var gIdx = 0; gIdx < gruposAllowlist.length; gIdx++) {
-    if (gruposAllowlist[gIdx].permitido && gruposAllowlist[gIdx].modoGrupo !== "BLOQUEADO") {
-      qtdLiberados++;
-    }
-  }
-
-  var labelModo = cfg.modoOperacao === "SNIPER_AUTO"
-    ? "🟢 SNIPER AUTOMÁTICO (Disparo + Rotina)"
-    : "🟡 SEMI-AUTOMÁTICO (1-Click no Telegram)";
-
-  var labelStealth = cfg.responderApenasPv
-    ? "🕵️ LIGADO (Só chama no PV do escalista)"
-    : "📢 PADRÃO (Responde no Grupo + PV)";
-
-  var texto = [
-    "🎯 *SNIPER DE PLANTÕES — ULTRA ROTINA*",
-    "━━━━━━━━━━━━━━━━━━━━",
-    "👨‍⚕️ *Titular:* " + cfg.nome + " (" + cfg.crm + ")",
-    "⚙️ *Modo de Operação:* " + labelModo,
-    "🛡️ *Modo Fantasma (PV):* " + labelStealth,
-    "🔒 *Blindagem WhatsApp:* Zero-Trust Ativo (*" + qtdLiberados + "/" + gruposAllowlist.length + " grupos liberados* | 100% chats privados bloqueados)",
-    "💰 *Piso Mínimo (12h):* *R$ " + cfg.valorMinimo12h + "* (`R$ " + cfg.valorMinimoHora + "/h`)",
-    "🩺 *Setores (" + (cfg.setoresPermitidos || []).length + "):* " + (cfg.setoresPermitidos || []).join(", "),
-    "📅 *Sync Aba Rotina:* Ativo (Anti-Conflito + Auto-Bloco)",
-    "",
-    "📊 *PLACAR EM TEMPO REAL*",
-    "• Mensagens analisadas: *" + stats.totalAnalisadas + "*",
-    "• Calotes bloqueados: *🚫 " + stats.calotesEvitados + "* (" + blacklist.length + " na Blacklist)",
-    "• Plantões capturados: *⚡ " + stats.plantoesCapturados + "*",
-    "• Receita garantida: *💵 R$ " + stats.receitaGarantidaReais + "*"
-  ].join("\n");
-
-  var teclado = {
-    inline_keyboard: [
-      [
-        {
-          text: "🛡️ Grupos Permitidos (Allowlist: " + qtdLiberados + "/" + gruposAllowlist.length + ")",
-          callback_data: "sniper:grupos"
-        }
-      ],
-      [
-        {
-          text: "🩺 Setores Permitidos (" + (cfg.setoresPermitidos || []).length + ")",
-          callback_data: "sniper:setores"
-        },
-        {
-          text: "💰 Definir Piso Mínimo",
-          callback_data: "sniper:menu_piso"
-        }
-      ],
-      [
-        {
-          text: cfg.modoOperacao === "SNIPER_AUTO" ? "🔄 Modo: Sniper Auto" : "🔄 Modo: Semi-Auto",
-          callback_data: "sniper:toggle_mode"
-        },
-        {
-          text: cfg.responderApenasPv ? "🕵️ Stealth PV: ON" : "🕵️ Stealth PV: OFF",
-          callback_data: "sniper:toggle_stealth"
-        }
-      ],
-      [
-        { text: "🚫 Blacklist Anti-Calote", callback_data: "sniper:blacklist" },
-        { text: "📱 Parear Whats (8 Dígitos)", callback_data: "sniper:pair_wa" }
-      ],
-      [
-        { text: "🛠️ Diagnóstico & Ferramentas", callback_data: "sniper:diag" }
-      ],
-      [
-        { text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" },
-        { text: "🏠 Início", callback_data: "ux:hub:inicio" }
-      ]
-    ]
-  };
-
-  return { texto: texto, teclado: teclado };
-}
-
-function _enviarOuEditarPainelSniper(chatId, msgId, token, texto, teclado) {
-  var botToken = token || (typeof ConfigService !== "undefined" && ConfigService.get ? ConfigService.get("TELEGRAM_BOT_TOKEN", "") : "");
-  if (msgId && botToken && typeof executarPostTelegram === "function") {
-    try {
-      var url = "https://api.telegram.org/bot" + botToken + "/editMessageText";
-      var res = executarPostTelegram(url, {
-        chat_id: String(chatId),
-        message_id: Number(msgId),
-        text: texto,
-        parse_mode: "Markdown",
-        reply_markup: teclado
-      });
-      if (res && res.ok) return true;
-    } catch (e) {}
-  }
-  if (typeof enviarMensagemComTecladoParaChat === "function") {
-    enviarMensagemComTecladoParaChat(chatId, texto, teclado);
-    return true;
-  }
-  if (typeof enviarMensagemParaChat === "function") {
-    enviarMensagemParaChat(chatId, texto);
-    return true;
-  }
-  return false;
-}
-
-function tratarComandoSniperPlantoes(chatId, argTexto, msgId) {
-  var arg = String(argTexto || "").trim();
-  var argLower = arg.toLowerCase();
-
-  if (argLower.indexOf("calote ") === 0) {
-    var termo = arg.slice(7).trim();
-    PlantaoSniperService.adicionarBlacklistCalote(termo, "Adicionado via comando /sniper calote");
-    enviarMensagemParaChat(chatId, "🚫 *" + termo + "* adicionado à Blacklist Anti-Calote com sucesso!");
-  } else if (argLower === "grupos") {
-    var telaGrp = _construirPainelGruposAllowlistTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, null, telaGrp.texto, telaGrp.teclado);
-  } else if (argLower === "setores") {
-    var telaSet = _construirPainelSetoresTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, null, telaSet.texto, telaSet.teclado);
-  } else if (argLower.indexOf("parear") === 0) {
-    var foneArg = arg.replace(/^parear\s*/i, "").trim();
-    var resPair = PlantaoSniperService.gerarCodigoPareamentoWhatsApp(foneArg);
-    if (!resPair.sucesso) {
-      enviarMensagemParaChat(
-        chatId,
-        "📱 *Pareamento WhatsApp (8 Dígitos)*\n\n" +
-        "⚠️ " + resPair.motivo + "\n" +
-        "Envie: `/sniper parear 11988887777`"
-      );
-      return true;
-    }
-    enviarMensagemParaChat(
-      chatId,
-      "📱 *CÓDIGO DE PAREAMENTO GERADO!*\n" +
-      "━━━━━━━━━━━━━━━━━━━━\n" +
-      "📞 *Número:* `+" + resPair.telefone + "`\n" +
-      "🔑 *Código 8 Dígitos:* `" + resPair.codigo + "`\n\n" +
-      "Abra o *WhatsApp > Aparelhos Conectados > Conectar com número de telefone* e insira o código acima."
-    );
-    return true;
-  } else if (argLower === "simular") {
-    var logs = PlantaoSniperService.executarSimulacaoSniper(chatId);
-    var resumo = ["🧪 *SIMULAÇÃO DE 8 MENSAGENS REAIS CONCLUÍDA:*", ""];
-    for (var i = 0; i < logs.length; i++) {
-      resumo.push("`" + logs[i].indice + ".` *" + logs[i].status + "* — _" + logs[i].detalhe + "_");
-    }
-    enviarMensagemParaChat(chatId, resumo.join("\n"));
-    return true;
-  } else if (argLower.indexOf("piso") === 0 || /^\d+$/.test(arg)) {
-    var valorStr = arg.replace(/^[^\d]*/, "").trim();
-    var valorNum = parseInt(valorStr, 10);
-    if (valorNum && valorNum >= 500 && valorNum <= 10000) {
-      var atualizado = PlantaoSniperService.salvarConfigSniper({ valorMinimo12h: valorNum });
-      enviarMensagemParaChat(
-        chatId,
-        "💰 *Piso Mínimo Atualizado com Sucesso!*\n\n" +
-        "Novo piso configurado: *R$ " + atualizado.valorMinimo12h + "/12h* (`R$ " + atualizado.valorMinimoHora + "/h`).\n" +
-        "Plantões com remuneração inferior a este piso serão recusados automaticamente."
-      );
-      return true;
-    } else {
-      enviarMensagemParaChat(
-        chatId,
-        "⚠️ *Valor inválido.* Envie um valor entre R$ 500 e R$ 10.000.\nExemplo: `/piso 1500` ou `/sniper piso 1600`"
-      );
-      return true;
-    }
-  }
-
-  var painel = _construirPainelSniperTelegram();
-  return _enviarOuEditarPainelSniper(chatId, msgId, null, painel.texto, painel.teclado);
-}
-
-function tratarCallbackSniperPlantoes(cb, data, ctx) {
-  var chatId = (ctx && ctx.chatId) || (cb && cb.message && cb.message.chat && cb.message.chat.id);
-  var msgId = (ctx && ctx.msgId) || (cb && cb.message && cb.message.message_id);
-  var token = (ctx && ctx.token) || (typeof ConfigService !== "undefined" ? ConfigService.get("TELEGRAM_BOT_TOKEN", "") : "");
-  var cbId = cb && cb.id;
-
-  if (!chatId) return false;
-
-  var acao = String(data || "").replace(/^sniper:/, "");
-
-  if (acao === "painel") {
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🎯 Painel Sniper atualizado!", false);
-    }
-    var p0 = _construirPainelSniperTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, p0.texto, p0.teclado);
-  }
-
-  if (acao === "grupos") {
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🛡️ Allowlist Zero-Trust de grupos carregada!", false);
-    }
-    var pg = _construirPainelGruposAllowlistTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, pg.texto, pg.teclado);
-  }
-
-  if (acao.indexOf("grp_toggle:") === 0) {
-    var idx = parseInt(acao.slice(11), 10);
-    var resToggle = PlantaoSniperService.alternarPermissaoGrupo(idx);
-    var msgFeedback = resToggle.sucesso && resToggle.grupo
-      ? (resToggle.grupo.nome + " -> " + resToggle.grupo.modoGrupo)
-      : "Grupo não encontrado";
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🛡️ " + msgFeedback, false);
-    }
-    var pgToggle = _construirPainelGruposAllowlistTelegram("Permissão atualizada: " + msgFeedback);
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, pgToggle.texto, pgToggle.teclado);
-  }
-
-  if (acao === "grp_sync") {
-    var resSync = PlantaoSniperService.sincronizarGruposWhatsApp();
-    var notaSync = "Sincronização concluída (" + resSync.totalGrupos + " grupos verificados; " + resSync.novosAdicionados + " novos em modo 🔴 BLOQUEADO).";
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🔄 Grupos sincronizados em modo Zero-Trust!", false);
-    }
-    var pgSync = _construirPainelGruposAllowlistTelegram(notaSync);
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, pgSync.texto, pgSync.teclado);
-  }
-
-  if (acao === "setores") {
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🩺 Catálogo de setores carregado!", false);
-    }
-    var ps = _construirPainelSetoresTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, ps.texto, ps.teclado);
-  }
-
-  if (acao.indexOf("setor_toggle:") === 0) {
-    var idxSetor = parseInt(acao.slice(13), 10);
-    var resSet = PlantaoSniperService.alternarSetorPermitido(idxSetor);
-    var notaSet = resSet.sucesso
-      ? (resSet.setor + (resSet.ativado ? " ativado ✅" : " desativado ⬜"))
-      : "Setor não encontrado";
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🩺 " + notaSet, false);
-    }
-    var psToggle = _construirPainelSetoresTelegram(notaSet);
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, psToggle.texto, psToggle.teclado);
-  }
-
-  if (acao === "setor_reset") {
-    PlantaoSniperService.redefinirSetoresPadrao();
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "♻️ Setores padrão restaurados!", false);
-    }
-    var psReset = _construirPainelSetoresTelegram("Setores padrão restaurados com sucesso!");
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, psReset.texto, psReset.teclado);
-  }
-
-  if (acao === "toggle_mode") {
-    var cfg1 = PlantaoSniperService.obterConfigSniper();
-    var novoModo = cfg1.modoOperacao === "SNIPER_AUTO" ? "SEMI_AUTO" : "SNIPER_AUTO";
-    PlantaoSniperService.salvarConfigSniper({ modoOperacao: novoModo });
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(
-        cbId,
-        novoModo === "SNIPER_AUTO"
-          ? "🟢 Modo Sniper Automático ativado!"
-          : "🟡 Modo Semi-Automático (1-Click) ativado!",
-        false
-      );
-    }
-    var p1 = _construirPainelSniperTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, p1.texto, p1.teclado);
-  }
-
-  if (acao === "toggle_stealth") {
-    var cfg2 = PlantaoSniperService.obterConfigSniper();
-    var novoStealth = !cfg2.responderApenasPv;
-    PlantaoSniperService.salvarConfigSniper({ responderApenasPv: novoStealth });
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(
-        cbId,
-        novoStealth
-          ? "🕵️ Modo Fantasma ativado (responde só no PV do escalista)!"
-          : "📢 Modo Padrão ativado (responde no Grupo + PV)!",
-        false
-      );
-    }
-    var p2 = _construirPainelSniperTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, p2.texto, p2.teclado);
-  }
-
-  if (acao === "val_up" || acao === "val_down") {
-    var cfg3 = PlantaoSniperService.obterConfigSniper();
-    var delta = acao === "val_up" ? 100 : -100;
-    var novoValor = Math.max(600, (Number(cfg3.valorMinimo12h) || 1300) + delta);
-    var atualizado = PlantaoSniperService.salvarConfigSniper({ valorMinimo12h: novoValor });
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(
-        cbId,
-        "💰 Novo piso: R$ " + atualizado.valorMinimo12h + "/12h (R$ " + atualizado.valorMinimoHora + "/h)",
-        false
-      );
-    }
-    var p3 = _construirPainelSniperTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, p3.texto, p3.teclado);
-  }
-
-  if (acao === "menu_piso") {
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "💰 Selecione ou defina o piso", false);
-    }
-    var cfgPiso = PlantaoSniperService.obterConfigSniper();
-    var msgPiso = [
-      "💰 *DEFINIR PISO MÍNIMO DE PLANTÃO (12h)*",
-      "━━━━━━━━━━━━━━━━━━━━",
-      "Piso atual configurado: *R$ " + cfgPiso.valorMinimo12h + "/12h* (`R$ " + cfgPiso.valorMinimoHora + "/h`)",
-      "",
-      "Selecione um piso comum abaixo com 1 toque, ou defina qualquer valor digitando `/piso <valor>` no chat (ex: `/piso 1600`):"
-    ].join("\n");
-
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, msgPiso, {
-      inline_keyboard: [
-        [
-          { text: "R$ 1.200", callback_data: "sniper:set_piso:1200" },
-          { text: "R$ 1.300", callback_data: "sniper:set_piso:1300" },
-          { text: "R$ 1.400", callback_data: "sniper:set_piso:1400" }
-        ],
-        [
-          { text: "R$ 1.500", callback_data: "sniper:set_piso:1500" },
-          { text: "R$ 1.600", callback_data: "sniper:set_piso:1600" },
-          { text: "R$ 1.800", callback_data: "sniper:set_piso:1800" }
-        ],
-        [
-          { text: "R$ 2.000", callback_data: "sniper:set_piso:2000" },
-          { text: "R$ 2.200", callback_data: "sniper:set_piso:2200" },
-          { text: "R$ 2.500", callback_data: "sniper:set_piso:2500" }
-        ],
-        [
-          { text: "🔙 Voltar ao Painel Sniper", callback_data: "sniper:painel" }
-        ]
-      ]
-    });
-  }
-
-  if (acao.indexOf("set_piso:") === 0) {
-    var vPiso = parseInt(acao.slice(9), 10);
-    if (vPiso && vPiso >= 500) {
-      PlantaoSniperService.salvarConfigSniper({ valorMinimo12h: vPiso });
-      if (cbId && typeof responderCallbackTelegram === "function") {
-        responderCallbackTelegram(cbId, "💰 Piso definido para R$ " + vPiso + "/12h!", false);
-      }
-    }
-    var pAtualizado = _construirPainelSniperTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, pAtualizado.texto, pAtualizado.teclado);
-  }
-
-  if (acao === "unlock_all") {
-    PlantaoSniperService.destravarTodaAgendaSniper();
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🔓 Trava de slots do Sniper limpa com sucesso!", false);
-    }
-    var p4 = _construirPainelSniperTelegram();
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, p4.texto, p4.teclado);
-  }
-
-  if (acao === "blacklist") {
-    var lista = PlantaoSniperService.obterBlacklistCalote();
-    var linhas = [
-      "🚫 *BLACKLIST ANTI-CALOTE COLABORATIVA*",
-      "━━━━━━━━━━━━━━━━━━━━",
-      "Unidades e cooperativas bloqueadas automaticamente no Estágio 3:",
-      ""
-    ];
-    for (var i = 0; i < lista.length; i++) {
-      linhas.push("• *" + lista[i].termo + "* — _" + (lista[i].motivo || "Restrição financeira") + "_");
-    }
-    linhas.push("");
-    linhas.push("💡 _Para adicionar um novo caloteiro manualmente, envie:_");
-    linhas.push("`/sniper calote Nome do Hospital ou Cooperativa`");
-
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🚫 Blacklist Anti-Calote carregada", false);
-    }
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, linhas.join("\n"), {
-      inline_keyboard: [[{ text: "🔙 Voltar ao Painel Sniper", callback_data: "sniper:painel" }]]
-    });
-  }
-
-  if (acao === "pair_wa") {
-    var cfgWa = PlantaoSniperService.obterConfigSniper();
-    var resPairWa = PlantaoSniperService.gerarCodigoPareamentoWhatsApp(cfgWa.telefoneWhatsApp);
-
-    var blocoCodigo = resPairWa.sucesso
-      ? (
-          "📞 *Telefone Vinculado:* `+" + resPairWa.telefone + "`\n" +
-          "🔑 *Código de Pareamento (8 Dígitos):* `" + resPairWa.codigo + "`\n" +
-          "🔌 *Canal:* `" + resPairWa.origem + "`"
-        )
-      : (
-          "⚠️ *Nenhum número configurado ainda.*\n" +
-          "Para gerar o código de 8 dígitos vinculado ao seu número, envie no chat:\n" +
-          "`/sniper parear 11988887777`"
-        );
-
-    var msgPair = [
-      "📱 *PAREAMENTO WHATSAPP (8 DÍGITOS — SEM QR CODE)*",
-      "━━━━━━━━━━━━━━━━━━━━",
-      "Para conectar o Listener Baileys/Evolution ao seu WhatsApp usando apenas 1 celular:",
-      "",
-      "1️⃣ Abra o *WhatsApp* > *Aparelhos Conectados* > *Conectar um aparelho*",
-      "2️⃣ Toque em *Conectar com número de telefone*",
-      "3️⃣ Use os dados de pareamento abaixo:",
-      "",
-      blocoCodigo,
-      "",
-      "🛡️ *Blindagem & Stealth Ativos:*",
-      "• `Camada 1`: Bloqueio hard-coded de conversas privadas (`@s.whatsapp.net`) e Status",
-      "• `Camada 2`: Apenas grupos marcados como 🟢 ou 👁️ na Allowlist são lidos",
-      "• `markOnlineOnConnect: false` & `readMessages: false` (Zero visto azul)",
-      "• Jitter Humano `1.8s–3.2s` + Simulação de digitação (`composing`)"
-    ].join("\n");
-
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "📱 Painel de pareamento WhatsApp carregado!", false);
-    }
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, msgPair, {
-      inline_keyboard: [
-        [{ text: "🔄 Gerar Novo Código", callback_data: "sniper:pair_wa" }],
-        [{ text: "🛡️ Configurar Grupos Permitidos", callback_data: "sniper:grupos" }],
-        [{ text: "🔙 Voltar ao Painel Sniper", callback_data: "sniper:painel" }]
-      ]
-    });
-  }
-
-  if (acao === "diag") {
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🛠️ Menu de Diagnóstico e Ferramentas", false);
-    }
-    var msgDiag = [
-      "🛠️ *DIAGNÓSTICO & FERRAMENTAS DO SNIPER*",
-      "━━━━━━━━━━━━━━━━━━━━",
-      "Ferramentas de teste e manutenção técnica:",
-      "",
-      "🧪 *Simulador de 8 Vagas:* Injeta mensagens sintéticas nos grupos para auditar filtros anti-calote, especialidades, piso salarial e auto-agendamento.",
-      "🔓 *Destravar Agenda:* Limpa locks temporários de slots capturados pelo Sniper na sua rotina.",
-      "",
-      "💡 _Também acessível a qualquer momento via comando:_ `/sniper simular`"
-    ].join("\n");
-
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, msgDiag, {
-      inline_keyboard: [
-        [{ text: "🧪 Simular 8 Vagas WhatsApp", callback_data: "sniper:simular" }],
-        [{ text: "🔓 Destravar Agenda Sniper", callback_data: "sniper:unlock_all" }],
-        [{ text: "🔙 Voltar ao Painel Sniper", callback_data: "sniper:painel" }]
-      ]
-    });
-  }
-
-  if (acao === "simular") {
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🧪 Rodando bateria de 8 vagas reais...", false);
-    }
-    var logsSim = PlantaoSniperService.executarSimulacaoSniper(chatId);
-    var relatorio = [
-      "🧪 *RELATÓRIO DO SIMULADOR SNIPER (8 MENSAGENS)*",
-      "━━━━━━━━━━━━━━━━━━━━"
-    ];
-    for (var j = 0; j < logsSim.length; j++) {
-      var l = logsSim[j];
-      var icone = l.status.indexOf("CAPTURADA") === 0 || l.status.indexOf("AGUARDANDO") === 0 ? "✅" : "🛡️";
-      relatorio.push(icone + " *Msg #" + l.indice + "* (" + l.grupo + "): `" + l.status + "`\n   ↳ _" + l.detalhe + "_");
-    }
-    relatorio.push("");
-    relatorio.push("📌 _O Card da vaga vencedora (Hospital 9 de Julho R$ 1.560) foi enviado acima e agendado na sua Aba Rotina!_");
-
-    return _enviarOuEditarPainelSniper(chatId, msgId, token, relatorio.join("\n"), {
-      inline_keyboard: [
-        [
-          { text: "📅 Ver Minha Rotina Hoje", callback_data: "rotina:refresh" },
-          { text: "🎛️ Painel Sniper", callback_data: "sniper:painel" }
-        ]
-      ]
-    });
-  }
-
-  if (acao.indexOf("claim:") === 0) {
-    var hash = acao.slice(6);
-    var resultadoClaim = PlantaoSniperService.confirmarCapturaSemiAuto(hash);
-    if (!resultadoClaim.sucesso) {
-      if (cbId && typeof responderCallbackTelegram === "function") {
-        responderCallbackTelegram(cbId, "⚠️ Vaga expirada do buffer de memória.", true);
-      }
-      return true;
-    }
-
-    var ofertaClaim = resultadoClaim.oferta;
-    var ag = resultadoClaim.agendamentoRotina || {};
-    var st = resultadoClaim.stealth || {};
-
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "⚡ Plantão capturado, contabilizado e agendado na Rotina!", false);
-    }
-
-    var textoConfirmacao = [
-      "✅ *PLANTÃO CONFIRMADO E AGENDADO NA ROTINA!*",
-      "━━━━━━━━━━━━━━━━━━━━",
-      "🏥 *Unidade:* " + ofertaClaim.hospital + " (" + ofertaClaim.setor + ")",
-      "🕒 *Turno:* " + ofertaClaim.horarioDescricao,
-      "💰 *Valor Contabilizado:* *R$ " + ofertaClaim.valorTotal + "*",
-      "📅 *Aba Rotina:* Bloco injetado em `" + (ag.dataIso || "hoje") + "`",
-      "",
-      resultadoClaim.disparoBridgeExecutado
-        ? "⚡ *Bridge WhatsApp:* Mensagem Stealth enviada automaticamente ao escalista!"
-        : (st.linkWhatsAppDireto
-            ? "👇 *Toque abaixo para abrir a conversa com o escalista com a mensagem já preenchida:*"
-            : "ℹ️ _Confirme diretamente no grupo de origem._")
-    ].join("\n");
-
-    var botoesClaim = [];
-    if (st.linkWhatsAppDireto) {
-      botoesClaim.push([{ text: "💬 Enviar Mensagem ao Escalista", url: st.linkWhatsAppDireto }]);
-    }
-    botoesClaim.push([{ text: "🎛️ Painel Sniper", callback_data: "sniper:painel" }]);
-
-    if (typeof enviarMensagemComTecladoParaChat === "function") {
-      enviarMensagemComTecladoParaChat(chatId, textoConfirmacao, { inline_keyboard: botoesClaim });
-    } else if (typeof enviarMensagemParaChat === "function") {
-      enviarMensagemParaChat(chatId, textoConfirmacao);
-    }
-    return true;
-  }
-
-  if (acao.indexOf("denunciar:") === 0) {
-    var hosp = acao.slice(10).trim();
-    PlantaoSniperService.adicionarBlacklistCalote(hosp, "Denunciado com 1 clique pelo médico no alerta de vaga");
-    if (cbId && typeof responderCallbackTelegram === "function") {
-      responderCallbackTelegram(cbId, "🚫 " + hosp + " adicionado à Blacklist Anti-Calote!", true);
-    }
-    return true;
-  }
-
-  return false;
 }

@@ -175,7 +175,9 @@ if (!propsStore.SPREADSHEET_ID_INTERACOES) {
 }
 
 let persistTimer = null;
-function escreverPropriedades() {
+let asyncPersistQueue = Promise.resolve();
+
+function escreverPropriedadesSync() {
   const temporario = path.join(DATA_DIR, `.properties-${process.pid}.tmp`);
   try {
     fs.writeFileSync(temporario, JSON.stringify(propsStore), { encoding: 'utf8', mode: 0o600 });
@@ -185,18 +187,42 @@ function escreverPropriedades() {
     throw err;
   }
 }
+
+function escreverPropriedadesAsync() {
+  const snapshot = JSON.stringify(propsStore);
+  asyncPersistQueue = asyncPersistQueue.then(async () => {
+    const temporario = path.join(DATA_DIR, `.properties-${process.pid}-${Date.now()}.tmp`);
+    try {
+      await fs.promises.writeFile(temporario, snapshot, { encoding: 'utf8', mode: 0o600 });
+      await fs.promises.rename(temporario, PROPERTIES_FILE);
+    } catch (err) {
+      try { await fs.promises.unlink(temporario); } catch (_) {}
+      console.error('[Runtime] Erro ao persistir properties.json (async):', err.message);
+    }
+  });
+  return asyncPersistQueue;
+}
+
 function persistirPropriedades(imediato = false) {
+  const ehTeste = process.env.NODE_ENV === 'test' || propsStore.NODE_ENV === 'test';
   if (imediato) {
     if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
-    // O webhook só pode confirmar o update se a gravação local foi concluída.
-    escreverPropriedades();
+    if (ehTeste) {
+      escreverPropriedadesSync();
+    } else {
+      escreverPropriedadesAsync();
+    }
     return;
   }
   if (persistTimer) return;
   persistTimer = setTimeout(() => {
     persistTimer = null;
     try {
-      escreverPropriedades();
+      if (ehTeste) {
+        escreverPropriedadesSync();
+      } else {
+        escreverPropriedadesAsync();
+      }
     } catch (e) {
       console.error('[Runtime] Erro ao persistir properties.json:', e.message);
     }
@@ -216,7 +242,7 @@ if (typeof googleCalendarInstance.setPropsBridge === 'function') {
 
 process.on('beforeExit', () => {
   try {
-    escreverPropriedades();
+    escreverPropriedadesSync();
   } catch (e) {}
 });
 
@@ -542,6 +568,11 @@ const ctx = {
     log: (...args) => console.log('[BOT LOG]', ...args)
   },
 
+  __RUNTIME_RAM_DATA__: {
+    getRemumeRows: () => remumeRows,
+    getInteracoesRows: () => interacoesRows
+  },
+
   __BASE_GUIA_HSL__: guiaHslData,
   obterBaseGuiaHSL: () => guiaHslData,
 
@@ -569,7 +600,7 @@ const ctx = {
       return propsStore.VERTEX_PROJECT_ID || propsStore.GCP_PROJECT_ID || (info && info.creds && info.creds.project_id) || 'gen-lang-client-0798056953';
     },
     getLocation: () => propsStore.VERTEX_LOCATION || 'global',
-    getModel: () => propsStore.VERTEX_MODEL || propsStore.GEMINI_MODEL || 'gemini-2.5-flash'
+    getModel: () => propsStore.VERTEX_MODEL || propsStore.GEMINI_MODEL || 'gemini-4-hydrogen'
   },
 
   PropertiesService: {
@@ -1088,6 +1119,7 @@ module.exports = {
   ctx,
   propsStore,
   persistirPropriedades,
+  persistirPropriedadesAsync: () => escreverPropriedadesAsync(),
   rotinaBus,
   bumpRotinaVersion,
   getRotinaVersion,

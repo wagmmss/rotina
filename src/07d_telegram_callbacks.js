@@ -47,12 +47,12 @@ function obterContextoCallback_(cb) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * A. HÁBITOS E ENERGIA (Notion Habit Log)
+ * A. HÁBITOS E ENERGIA (Persistência Local Rápida)
  */
 function tratarCallbackHabitoEEnergia_(cb, data, ctx) {
   var chatCbHabit = ctx.chatId;
   if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(chatCbHabit)) {
-    responderCallbackTelegram(cb.id, "🔒 O Habit Tracker do Notion é exclusivo do titular.", true);
+    responderCallbackTelegram(cb.id, "🔒 O rastreador de hábitos é exclusivo do titular.", true);
     return true;
   }
   if (cb && cb.id && typeof responderCallbackTelegram === "function") {
@@ -62,7 +62,6 @@ function tratarCallbackHabitoEEnergia_(cb, data, ctx) {
   }
   var tz = (typeof ConfigService !== "undefined" && ConfigService.get) ? ConfigService.get("TIMEZONE", "America/Sao_Paulo") : "America/Sao_Paulo";
   var dataISO = ctx.dataAlvoISO || Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
-  var pageId = (typeof obterOuCriarPaginaHabitLog === "function") ? obterOuCriarPaginaHabitLog(dataISO) : null;
 
   var kb = cb.message && cb.message.reply_markup ? cb.message.reply_markup.inline_keyboard : null;
   var valorStatus = true;
@@ -79,39 +78,19 @@ function tratarCallbackHabitoEEnergia_(cb, data, ctx) {
   }
 
   var gravouComSucesso = false;
-  if (data.startsWith("habit_")) {
-    var mapaHabitos = {
-      "habit_medquest": "🧠 MedQuest",
-      "habit_gym": "🏋️ Academia",
-      "habit_english": "📚 Inglês",
-      "habit_guitar": "🎸 Violão",
-      "habit_love": "❤️ Namorada",
-      "habit_reading": "📖 Leitura"
-    };
-    var propName = mapaHabitos[data] || "";
-    if (pageId && propName && typeof atualizarCheckboxNotion === "function") {
-      gravouComSucesso = Boolean(atualizarCheckboxNotion(pageId, propName, valorStatus));
-    } else if (!pageId) {
-      // Fallback resiliente: persiste localmente se Notion não estiver configurado
-      try {
-        var props = PropertiesService.getScriptProperties();
-        props.setProperty("habito_" + dataISO + "_" + data, valorStatus ? "true" : "false");
-        gravouComSucesso = true;
-      } catch (_) {}
-    }
-  } else if (data.startsWith("energy_")) {
-    var valorEnergia = parseInt(data.replace("energy_", ""), 10);
-    if (pageId && typeof atualizarNumeroNotion === "function") {
-      gravouComSucesso = Boolean(atualizarNumeroNotion(pageId, "⚡ Energia (1–5)", valorEnergia));
-    } else if (!pageId) {
-      // Fallback resiliente para escala de energia se Notion não estiver configurado
-      try {
-        var props = PropertiesService.getScriptProperties();
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (data.startsWith("habit_")) {
+      props.setProperty("habito_" + dataISO + "_" + data, valorStatus ? "true" : "false");
+      gravouComSucesso = true;
+    } else if (data.startsWith("energy_")) {
+      var valorEnergia = parseInt(data.replace("energy_", ""), 10);
+      if (!isNaN(valorEnergia)) {
         props.setProperty("habito_" + dataISO + "_energia", String(valorEnergia));
         gravouComSucesso = true;
-      } catch (_) {}
+      }
     }
-  }
+  } catch (_) {}
 
   if (gravouComSucesso) {
     if (kb && cb.message && cb.message.chat) {
@@ -147,7 +126,7 @@ function tratarCallbackHabitoEEnergia_(cb, data, ctx) {
 }
 
 /**
- * A1.1 DÚVIDAS E PENDÊNCIAS CLÍNICAS (MEDQUEST / NOTION)
+ * A1.1 DÚVIDAS E PENDÊNCIAS CLÍNICAS (MEDQUEST LOCAL)
  */
 function tratarCallbackDuvidasMedQuest_(cb, data, ctx) {
   if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(ctx.chatId)) {
@@ -180,10 +159,6 @@ function tratarCallbackRotinaProdutividade_(cb, data, ctx) {
   if (data === "rotina_agenda") {
     responderCallbackTelegram(cb.id, "Consultando agenda...");
     return consultarEventosAgenda("", ctx.chatId, ctx.msgId);
-  }
-  if (data === "rotina_tasks") {
-    responderCallbackTelegram(cb.id, "Carregando tarefas...");
-    return listarTarefasHojeNotion(ctx.chatId, ctx.msgId);
   }
   if (data === "rotina_briefing") {
     responderCallbackTelegram(cb.id, "Gerando briefing matinal...");
@@ -223,7 +198,7 @@ function tratarCallbackRotinaProdutividade_(cb, data, ctx) {
   }
   if (data === "rotina_duvida") {
     responderCallbackTelegram(cb.id, "MedQuest / Dúvidas");
-    var msgDuvidaLegacy = "🧠 *MEDQUEST / DÚVIDAS MÉDICAS*\n\nEnvie sua dúvida médica digitando:\n`/duvida <sua dúvida>`\n💡 *Exemplo:* `/duvida Critérios de Light para derrame pleural`\n\nSua dúvida será salva no Notion para o bloco noturno de estudo ativo.";
+    var msgDuvidaLegacy = "🧠 *MEDQUEST / DÚVIDAS MÉDICAS*\n\nEnvie sua dúvida médica digitando:\n`/duvida <sua dúvida>`\n💡 *Exemplo:* `/duvida Critérios de Light para derrame pleural`\n\nSua dúvida será salva no banco local para o bloco noturno de estudo ativo.";
     var kbDuvidaLegacy = {
       inline_keyboard: [
         [{ text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" }, { text: "🏠 Início", callback_data: "ux:hub:inicio" }]
@@ -396,70 +371,6 @@ function tratarCallbackCalculadoras_(cb, data, ctx) {
     return true;
   }
   return false;
-}
-
-/**
- * E. ARQUIVAMENTO NO NOTION TASKS
- */
-function tratarCallbackNotionTasks_(cb, data, ctx) {
-  if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(ctx.chatId)) {
-    responderCallbackTelegram(cb.id, "🔒 O banco do Notion é exclusivo do titular.", true);
-    return true;
-  }
-  var partes = data.split("_");
-  var tipo = partes[1];
-  var cacheKey = partes.slice(2).join("_");
-
-  var cache = CacheService.getScriptCache();
-  var conteudo = cache.get(cacheKey);
-
-  if (cache.get("saved_" + cacheKey)) {
-    responderCallbackTelegram(cb.id, "Já salvo no Notion.");
-    return true;
-  }
-  if (conteudo) {
-    responderCallbackTelegram(cb.id, "Arquivando no Notion...");
-    var mapaTitulos = {
-      "soap": "Caso Clínico SOAP",
-      "rx": "Prescrição Ambulatorial",
-      "plantao": "Passagem de Plantão SBAR",
-      "round": "Pitch & Round Socrático",
-      "gaso": "Gasometria Arterial",
-      "conduta": "Conduta de Emergência",
-      "audio": "Registro Clínico por Áudio",
-      "imagem": "Análise de Imagem/ECG",
-      "calc": "Calculadora Clínica",
-      "interacao": "Análise de Interação Medicamentosa"
-    };
-    var tituloNotion = mapaTitulos[tipo] || "Anotação Clínica";
-    tituloNotion += " · " + Utilities.formatDate(new Date(), ctx.tz, "dd/MM HH:mm");
-
-    var sucesso = (typeof criarTarefaNotion === "function")
-      ? criarTarefaNotion(tituloNotion, "Internship", "2 · Important", conteudo)
-      : false;
-
-    if (sucesso) {
-      enviarMensagemParaChat(ctx.chatId, "📁 Arquivado no Notion Tasks com sucesso!");
-      var kbRestante = cb.message && cb.message.reply_markup && cb.message.reply_markup.inline_keyboard;
-      if (kbRestante) {
-        kbRestante = kbRestante.map(function(row) {
-          return row.filter(function(b) { return b.callback_data !== data; });
-        }).filter(function(row) { return row.length; });
-        executarPostTelegram("https://api.telegram.org/bot" + ConfigService.get("TELEGRAM_BOT_TOKEN") + "/editMessageReplyMarkup", {
-          chat_id: ctx.chatId,
-          message_id: ctx.msgId,
-          reply_markup: { inline_keyboard: kbRestante }
-        });
-      }
-      safePutCache(cache, "saved_" + cacheKey, "1", 21600);
-    } else {
-      enviarMensagemParaChat(ctx.chatId, "❌ Falha ao salvar no Notion. Tente novamente.");
-    }
-  } else {
-    responderCallbackTelegram(cb.id, "⚠️ Conteúdo expirado.");
-    if (typeof removerBotaoInline === "function") removerBotaoInline(cb);
-  }
-  return true;
 }
 
 /**
@@ -1041,7 +952,6 @@ function tratarCallbackExamesFisicos_(cb, data, ctx) {
 var MAPA_CALLBACKS_EXATOS_ = {
   // Rotina e Produtividade
   "rotina_agenda": tratarCallbackRotinaProdutividade_,
-  "rotina_tasks": tratarCallbackRotinaProdutividade_,
   "rotina_briefing": tratarCallbackRotinaProdutividade_,
   "rotina_checkin": tratarCallbackRotinaProdutividade_,
   "rotina_semana": tratarCallbackRotinaProdutividade_,
@@ -1137,14 +1047,6 @@ var ROTEADORES_PREFIXO_CALLBACKS_ = [
   { prefix: "habit_", handler: tratarCallbackHabitoEEnergia_ },
   { prefix: "energy_", handler: tratarCallbackHabitoEEnergia_ },
   { prefix: "duvida:", handler: tratarCallbackDuvidasMedQuest_ },
-  { prefix: "sniper:", handler: function(cb, data, ctx) {
-      if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(ctx.chatId)) {
-        responderCallbackTelegram(cb.id, "🔒 O Sniper de Plantões é exclusivo do titular.", true);
-        return true;
-      }
-      return (typeof tratarCallbackSniperPlantoes === "function") ? tratarCallbackSniperPlantoes(cb, data, ctx) : false;
-    }
-  },
   { prefix: "rotina:", handler: function(cb, data, ctx) {
       if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(ctx.chatId)) {
         responderCallbackTelegram(cb.id, "🔒 A rotina e timeline adaptativa são exclusivas do titular.", true);
@@ -1161,7 +1063,6 @@ var ROTEADORES_PREFIXO_CALLBACKS_ = [
   { prefix: "calc_cat_", handler: tratarCallbackCalculadoras_ },
   { prefix: "calc:", handler: tratarCallbackCalculadoras_ },
   { prefix: "calc_", handler: tratarCallbackCalculadoras_ },
-  { prefix: "salvarNotion_", handler: tratarCallbackNotionTasks_ },
   { prefix: "gerarPdfRx_", handler: tratarCallbackPrescricaoEFarmaco_ },
   { prefix: "rx_med:", handler: tratarCallbackPrescricaoEFarmaco_ },
   { prefix: "ped_med:", handler: tratarCallbackPrescricaoEFarmaco_ },

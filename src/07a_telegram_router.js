@@ -620,7 +620,7 @@ function tratarComandoStatus(chatId) {
     "• *Modo:* Servidor Oficial Node.js 20+ / Docker (Render 24/7)\n" +
     "• *" + nomeRedeSt + ":* " + stRemume + "\n" +
     "• *Base de Interações:* " + stInteracoes + "\n" +
-    "• *Notion & Calendar:* ✅ Operacionais\n\n" +
+    "• *Google Calendar & Rotina Local:* ✅ Operacionais\n\n" +
     "💡 Digite /menu para voltar ao início ou toque abaixo:";
   var kbStatus = {
     inline_keyboard: [
@@ -628,36 +628,6 @@ function tratarComandoStatus(chatId) {
     ]
   };
   return enviarMensagemComTecladoParaChat(chatId, msgStatus, kbStatus);
-}
-
-/**
- * Despacho do executor local de tarefas (PC).
- */
-function tratarComandoPc(chatId, texto) {
-  var partesPc = texto.split(/\s+/);
-  var tarefaPc = partesPc[1] ? partesPc[1].toLowerCase() : "";
-  var argsPc = partesPc.slice(2);
-
-  if (!tarefaPc || tarefaPc === "ajuda" || tarefaPc === "help") {
-    var msgAjudaPc = "🖥️ *PONTE DE EXECUÇÃO LOCAL (PC)*\n\n" +
-      "Envie uma ordem para o seu computador executar em segundo plano:\n\n" +
-      "• `/pc sync` — Sincronização de agenda e estudos\n" +
-      "• `/pc audit` — Auditoria de sobreposições no calendário\n" +
-      "• `/pc status` — Verifica se o daemon do PC está ativo\n\n" +
-      "💡 *Funcionamento:* A ordem é enfileirada na nuvem. Se o seu PC estiver ligado, ele executa e devolve o relatório aqui. Se estiver desligado, roda assim que o PC for ligado!";
-    return enviarMensagemParaChat(chatId, msgAjudaPc);
-  }
-
-  if (typeof enfileirarTarefaPc === "function") {
-    var taskId = enfileirarTarefaPc(chatId, tarefaPc, argsPc);
-    var msgOk = "⚡ *Ordem enfileirada na nuvem com sucesso!*\n\n" +
-      "• *Tarefa:* `" + tarefaPc + "`\n" +
-      "• *ID:* `" + taskId + "`\n\n" +
-      "🕒 O runner local processará silenciosamente e enviará o relatório completo aqui assim que concluído.";
-    return enviarMensagemParaChat(chatId, msgOk);
-  } else {
-    return enviarMensagemParaChat(chatId, "⚠️ Fila de tarefas locais temporariamente indisponível.");
-  }
 }
 
 /**
@@ -938,9 +908,6 @@ function rotearComandoSistema(comando, texto, chatId) {
     },
     "/contingencia": function() {
       return cmdHandlers["/offline"]();
-    },
-    "/pc": function() {
-      return tratarComandoPc(chatId, texto);
     },
     "/rx": function() {
       return tratarComandoRx(chatId, texto);
@@ -1313,11 +1280,6 @@ function rotearAtalhoTecladoFixo(texto, comando, chatId) {
   // 7. Agenda
   if (texto === "📅 Agenda") {
     return { executado: true, resultado: consultarEventosAgenda("hoje", chatId) };
-  }
-
-  // 8. Minhas Tarefas
-  if (texto === "📋 Minhas Tarefas") {
-    return { executado: true, resultado: listarTarefasHojeNotion(chatId) };
   }
 
   // 9. Gasometria
@@ -5868,13 +5830,7 @@ var TABELA_COMANDOS_AGENDA_ROTINA_AUDIO_ = {
   "/preceptor": true,
   "/voz": true,
   "/sabatina": true,
-  "/v": true,
-  "/audio": true,
-  "/a": true,
   "/agenda": true,
-  "/task": true,
-  "/tarefa": true,
-  "/tasks": true,
   "/duvida": true,
   "/duvidas": true,
   "/semana": true,
@@ -5883,10 +5839,6 @@ var TABELA_COMANDOS_AGENDA_ROTINA_AUDIO_ = {
   "/checkin": true,
   "/briefing": true,
   "/rotina": true,
-  "/sniper": true,
-  "/vagas": true,
-  "/plantoes": true,
-  "/piso": true,
   "/protocolo": true
 };
 
@@ -5918,8 +5870,8 @@ function executarComandoAgendaRotinaAudioInterno_(comando, texto, chatId, messag
     return responderPreceptorVozComIA(chatId, dadosPreceptor);
   }
 
-  if (comando === "/voz" || comando === "/sabatina" || comando === "/v" || comando === "/audio" || comando === "/a") {
-    var dadosVoz = texto.replace(/^\/(voz|sabatina|v|audio|a)\s*/i, "").trim();
+  if (comando === "/voz" || comando === "/sabatina") {
+    var dadosVoz = texto.replace(/^\/(voz|sabatina)\s*/i, "").trim();
     if (!dadosVoz) {
       if (typeof iniciarOuConvidarDiscussaoPreceptor === "function") {
         return iniciarOuConvidarDiscussaoPreceptor(chatId, { ehAudio: false });
@@ -6018,7 +5970,7 @@ function processarMensagemTexto(message) {
         "menu", "ajuda", "help", "manual", "start", "novo", "cancelar", "cockpit", "app",
         "perfil", "nome", "carimbo", "cidade", "cenario", "unidade", "importar_unidade", "importar_remume", "aprovar_remume", "solicitacoes_remume", "fila_remume",
         "soap", "rx", "rxh", "gaso", "winter", "crcl", "clcr", "clearance", "dva", "sri", "iot", "compatibilidade", "compatibilidade_y", "remume",
-        "sniper", "vagas", "piso", "ctg", "cardiotocografia", "distocia", "helperr", "sangramento1tri", "abortamento", "ectopica", "violencia_sexual", "violenciasexual", "estupro", "pep_go", "mastite", "bartholin",
+        "ctg", "cardiotocografia", "distocia", "helperr", "sangramento1tri", "abortamento", "ectopica", "violencia_sexual", "violenciasexual", "estupro", "pep_go", "mastite", "bartholin",
         "pcr", "acls", "conduta", "atb", "ped", "pals", "passagem", "sbar", "plantao", "leito", "enfermaria",
         "prenatal", "parto", "ginecologia", "go", "obstetricia", "oftalmo", "vertigem", "epistaxe", "colica",
         "asma", "dpoc", "icc", "frax", "quedas", "dermato", "toxo", "rcf", "saf",
@@ -6565,7 +6517,7 @@ function processarMensagemTexto(message) {
   if (decisao.intencao === "HABITO_PROATIVO") {
     var habitosMarcados = marcarHabitoProativoHoje(texto);
     if (habitosMarcados && habitosMarcados.length > 0) {
-      return enviarMensagemParaChat(chatId, "⚡ *Hábito registrado proativamente no Notion Habit Log!*\n\n✅ " + habitosMarcados.join("\n✅ ") + "\n\nSeu check-in noturno já estará atualizado! 🚀");
+      return enviarMensagemParaChat(chatId, "⚡ *Hábito registrado proativamente no rastreador local!*\n\n✅ " + habitosMarcados.join("\n✅ ") + "\n\nSeu check-in noturno já estará atualizado! 🚀");
     }
   }
 
@@ -6647,19 +6599,11 @@ function processarMensagemTexto(message) {
     return processarEEntregarIA(chatId, gerarCondutaEmergenciaComIA, texto, "conduta");
   }
 
-  if (decisao.intencao === "NOTION_TASK") {
-    if (!ehUsuarioTitular(chatId)) return enviarMensagemParaChat(chatId, "🔒 O banco do Notion é exclusivo do titular. Use o /menu para consultar calculadoras e condutas médicas.");
-    var okNovaTask = criarTarefaNotion(texto, "Personal", "2 · Important", "Captura autônoma via Telegram");
-    if (okNovaTask) return enviarMensagemParaChat(chatId, "✅ *Tarefa salva no Inbox do Notion Tasks!*");
-    enviarMensagemParaChat(chatId, "❌ Falha ao salvar no Notion. O pedido foi preservado na fila local ou verifique a configuração.");
-    return false;
-  }
-
-  if (decisao.intencao === "NOTION_DUVIDA") {
-    if (!ehUsuarioTitular(chatId)) return enviarMensagemParaChat(chatId, "🔒 O banco do Notion é exclusivo do titular. Use o /menu para consultar calculadoras e condutas médicas.");
+  if (decisao.intencao === "ESTUDO_DUVIDA" || decisao.intencao === "NOTION_DUVIDA") {
+    if (!ehUsuarioTitular(chatId)) return enviarMensagemParaChat(chatId, "🔒 O banco de dúvidas é exclusivo do titular. Use o /menu para consultar calculadoras e condutas médicas.");
     var duvTexto = texto.replace(/^(?:minha\s+)?d[úu]vida(?:\s+para\s+o\s+medquest)?\s*[:=]?\s*/i, "").trim();
-    var okDuv = salvarDuvidaEstudoNotion(duvTexto || texto);
-    if (okDuv) return enviarMensagemParaChat(chatId, "🧠 *Dúvida arquivada no Notion para o MedQuest!*");
+    var itemDuv = (typeof salvarDuvidaEstudoLocal === "function") ? salvarDuvidaEstudoLocal(duvTexto || texto) : null;
+    if (itemDuv) return enviarMensagemParaChat(chatId, "🧠 *Dúvida arquivada no banco local para o MedQuest!*\n\n💡 Digite `/duvidas` para revisar.");
   }
 
   if (decisao.intencao === "EVIDENCIA_MEDICA") {
@@ -6685,12 +6629,6 @@ function processarMensagemTexto(message) {
 
   if (decisao.intencao === "ENFERMARIA") {
     return enviarPainelEnfermaria(chatId, 0);
-  }
-
-  if (decisao.intencao === "SEGUNDA_MENTE") {
-    if (!ehUsuarioTitular(chatId)) return enviarMensagemParaChat(chatId, "🔒 O Second Brain do Notion é exclusivo do titular.");
-    var okNota = criarNotaSegundaMenteNotion(texto);
-    if (okNota) return enviarMensagemParaChat(chatId, "💡 *Insight arquivado no Notion Second Brain!*");
   }
 
   // 6. CONVERSAÇÃO NATURAL E DÚVIDAS MÉDICAS EM LINGUAGEM NATURAL (GROQ / OPENROUTER)

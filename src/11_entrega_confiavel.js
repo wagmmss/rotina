@@ -266,52 +266,7 @@ function verificarERegistrarCallbackId(callbackId, data) {
   return true;
 }
 
-function enfileirarTarefaPc(chatId, tarefa, args) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(15000);
-  try {
-    var sufixo = (typeof Utilities !== 'undefined' && Utilities.getUuid) ? Utilities.getUuid().replace(/-/g,'').substring(0,6) : Math.random().toString(36).substring(2,7);
-    var taskId = 'pctask_' + Date.now() + '_' + sufixo;
-    var payload = {
-      id: taskId,
-      chat_id: String(chatId),
-      tarefa: String(tarefa || '').toLowerCase(),
-      args: args || [],
-      status: 'pending',
-      created: Date.now()
-    };
-    PersistenciaBot.salvar(taskId, payload);
-    return taskId;
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function obterTarefasPcPendentes() {
-  var all = PersistenciaBot.snapshot(true);
-  return PersistenciaBot.listar('pctask_', all).filter(function(r) {
-    return r.valor && r.valor.status === 'pending';
-  }).map(function(r) { return r.valor; });
-}
-
-function concluirTarefaPc(taskId, status, resultado) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(15000);
-  try {
-    var reg = PersistenciaBot.ler(taskId);
-    if (!reg) return false;
-    reg.status = status || 'done';
-    reg.resultado = resultado || '';
-    reg.completed = Date.now();
-    PersistenciaBot.salvar(taskId, reg);
-    return true;
-  } finally {
-    lock.releaseLock();
-  }
-}
-
 function rotearUpdate(update) {
-  if(update.inline_query && typeof processarInlineQuery === 'function') return processarInlineQuery(update.inline_query);
   if(update.callback_query) return processarCallbackBotao(update.callback_query);
   var m=update.message;
   if(!m) return;
@@ -593,6 +548,7 @@ function processarCaixaSaida(all) {
 
 // Arquivos permanecem privados no Drive. Nunca reenvia nem reexecuta uma pendência.
 function pastaPendenciasBot(criar) {
+  if (typeof DriveApp === 'undefined') return null;
   var p=PropertiesService.getScriptProperties(),id=p.getProperty('BOT_PENDENCIAS_FOLDER_ID');
   if(id) return DriveApp.getFolderById(id);
   if(!criar) return null;
@@ -602,6 +558,7 @@ function pastaPendenciasBot(criar) {
 }
 function arquivarPendenciaBot(key, item) {
   if (item.archiveId) return item;
+  if (typeof DriveApp === 'undefined') throw new Error('DriveApp indisponível no runtime Node.');
   var pasta=pastaPendenciasBot(true);
   var file=pasta.createFile(key+'.json',JSON.stringify({key:key,registro:item}), 'application/json');
   var arquivoId=file.getId();
@@ -638,6 +595,7 @@ function recuperarRegistroBot(key) {
   if(!/^(?:inbox_\d+|outbox_[\w-]+)$/.test(key)) return null;
   var item=PersistenciaBot.ler(key);
   if(item && !item.archiveId) return item;
+  if (typeof DriveApp === 'undefined') return null;
   var arquivo;
   if(item && item.archiveId) arquivo=DriveApp.getFileById(item.archiveId);
   else {

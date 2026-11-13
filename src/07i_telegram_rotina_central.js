@@ -12,9 +12,6 @@
 
 var TABELA_COMANDOS_ROTINA_PRODUTIVIDADE_ = {
   "/agenda": true,
-  "/task": true,
-  "/tarefa": true,
-  "/tasks": true,
   "/duvida": true,
   "/duvidas": true,
   "/semana": true,
@@ -22,10 +19,7 @@ var TABELA_COMANDOS_ROTINA_PRODUTIVIDADE_ = {
   "/habitos": true,
   "/checkin": true,
   "/briefing": true,
-  "/rotina": true,
-  "/sniper": true,
-  "/vagas": true,
-  "/piso": true
+  "/rotina": true
 };
 
 /**
@@ -54,7 +48,8 @@ function construirTecladoHubRotina() {
         {"text": "📊 Aderência Semanal", "callback_data": "rotina:aderencia"}
       ],
       [
-        {"text": "🎯 Sniper de Plantões (WhatsApp)", "callback_data": "sniper:painel"}
+        {"text": "🧠 Dúvidas Estudo", "callback_data": "ux:rotina:duvidas_lista"},
+        {"text": "🏁 Fim de Plantão", "callback_data": "rotina_plantao_fim"}
       ],
       [
         {"text": "🏠 Início", "callback_data": "ux:hub:inicio"}
@@ -64,7 +59,7 @@ function construirTecladoHubRotina() {
 }
 
 /**
- * Despachador modular de comandos de Rotina, Agenda, Notion e Ciclos Diários
+ * Despachador modular de comandos de Rotina, Agenda e Ciclos Diários
  */
 function despacharComandosRotinaEProdutividade(comando, texto, chatId, message) {
   if (!TABELA_COMANDOS_ROTINA_PRODUTIVIDADE_[comando]) {
@@ -75,7 +70,7 @@ function despacharComandosRotinaEProdutividade(comando, texto, chatId, message) 
   if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(chatId)) {
     return {
       tratado: true,
-      resultado: enviarMensagemParaChat(chatId, "🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Notion, Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use o /menu para acessar calculadoras, condutas, guias de diluição HSL e consultas clínicas.")
+      resultado: enviarMensagemParaChat(chatId, "🔒 *Recurso Restrito ao Titular*\n\nEste recurso (Agenda e Rotina pessoal) é exclusivo do administrador da conta.\n\n💡 Use o /menu para acessar calculadoras, condutas, guias de diluição HSL e consultas clínicas.")
     };
   }
 
@@ -84,26 +79,6 @@ function despacharComandosRotinaEProdutividade(comando, texto, chatId, message) 
   if (comando === "/agenda") {
     var paramAgenda = (texto || "").replace(/^\/agenda\s*/i, "").trim();
     res = (typeof consultarEventosAgenda === "function") ? consultarEventosAgenda(paramAgenda, chatId) : false;
-  } else if (comando === "/sniper" || comando === "/vagas" || comando === "/piso") {
-    var argSniper = (comando === "/piso")
-      ? ("piso " + (texto || "").replace(/^\/piso\s*/i, "").trim())
-      : (texto || "").replace(/^\/(sniper|vagas)\s*/i, "").trim();
-    res = (typeof tratarComandoSniperPlantoes === "function") ? tratarComandoSniperPlantoes(chatId, argSniper) : false;
-  } else if (comando === "/task" || comando === "/tarefa") {
-    var tarefaTexto = (texto || "").replace(/^\/(task|tarefa)\s*/i, "").trim();
-    if (!tarefaTexto) {
-      res = enviarMensagemParaChat(chatId, "📋 Digite a tarefa a salvar no Inbox do Notion. Ex: `/task Revisar hemograma do leito 14`");
-    } else {
-      var okTask = (typeof criarTarefaNotion === "function") ? criarTarefaNotion(tarefaTexto, "Personal", "2 · Important", "Captura rápida via Telegram") : false;
-      if (okTask) {
-        res = enviarMensagemParaChat(chatId, "✅ *Tarefa salva no Inbox do Notion Tasks!*");
-      } else {
-        enviarMensagemParaChat(chatId, "❌ Falha ao salvar no Notion. O pedido foi preservado na fila local ou verifique o token.");
-        res = false;
-      }
-    }
-  } else if (comando === "/tasks") {
-    res = (typeof listarTarefasHojeNotion === "function") ? listarTarefasHojeNotion(chatId) : false;
   } else if (comando === "/duvidas") {
     res = (typeof listarDuvidasMedQuest === "function") ? listarDuvidasMedQuest(chatId) : false;
   } else if (comando === "/duvida") {
@@ -111,8 +86,8 @@ function despacharComandosRotinaEProdutividade(comando, texto, chatId, message) 
     if (!duvidaTexto || duvidaTexto.toLowerCase() === "listar") {
       res = (typeof listarDuvidasMedQuest === "function") ? listarDuvidasMedQuest(chatId) : false;
     } else {
-      var okDuvida = (typeof salvarDuvidaEstudoNotion === "function") ? salvarDuvidaEstudoNotion(duvidaTexto) : false;
-      if (okDuvida) {
+      var itemDuvida = (typeof salvarDuvidaEstudoLocal === "function") ? salvarDuvidaEstudoLocal(duvidaTexto) : null;
+      if (itemDuvida) {
         var kbDuv = {
           inline_keyboard: [
             [{ text: "📋 Ver Dúvidas Salvas", callback_data: "ux:rotina:duvidas_lista" }],
@@ -442,4 +417,121 @@ function tratarCallbackRotina(cb) {
       }
     } catch (_) {}
   }
+}
+
+/**
+ * ==============================================================================
+ * BANCO LOCAL DE DÚVIDAS DE ESTUDO / MEDQUEST (PropertiesService)
+ * ==============================================================================
+ */
+var CHAVE_DUVIDAS_MEDQUEST_LOCAL_ = "duvidas_medquest_local";
+
+function obterDuvidasEstudoLocal() {
+  try {
+    var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+      ? PropertiesService.getScriptProperties()
+      : null;
+    if (!props) return [];
+    var raw = props.getProperty(CHAVE_DUVIDAS_MEDQUEST_LOCAL_);
+    if (!raw) return [];
+    var parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function salvarDuvidaEstudoLocal(texto) {
+  var textoLimpo = String(texto || "").trim();
+  if (!textoLimpo) return null;
+  var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+    ? PropertiesService.getScriptProperties()
+    : null;
+  var lista = obterDuvidasEstudoLocal();
+  var tz = (typeof ConfigService !== "undefined" && ConfigService.get)
+    ? ConfigService.get("TIMEZONE", "America/Sao_Paulo")
+    : "America/Sao_Paulo";
+  var dataISO = (typeof Utilities !== "undefined" && Utilities.formatDate)
+    ? Utilities.formatDate(new Date(), tz, "yyyy-MM-dd")
+    : new Date().toISOString().slice(0, 10);
+  var item = {
+    id: "duv_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+    texto: textoLimpo,
+    dataISO: dataISO,
+    resolvida: false,
+    criadaEm: new Date().toISOString()
+  };
+  lista.unshift(item);
+  if (lista.length > 100) lista = lista.slice(0, 100);
+  if (props) {
+    try {
+      props.setProperty(CHAVE_DUVIDAS_MEDQUEST_LOCAL_, JSON.stringify(lista));
+    } catch (_) {}
+  }
+  return item;
+}
+
+function marcarDuvidaEstudoResolvida(duvidaId) {
+  if (!duvidaId) return false;
+  var props = (typeof PropertiesService !== "undefined" && PropertiesService.getScriptProperties)
+    ? PropertiesService.getScriptProperties()
+    : null;
+  var lista = obterDuvidasEstudoLocal();
+  var achou = false;
+  for (var i = 0; i < lista.length; i++) {
+    if (String(lista[i].id) === String(duvidaId)) {
+      lista[i].resolvida = true;
+      lista[i].resolvidaEm = new Date().toISOString();
+      achou = true;
+      break;
+    }
+  }
+  if (achou && props) {
+    try {
+      props.setProperty(CHAVE_DUVIDAS_MEDQUEST_LOCAL_, JSON.stringify(lista));
+    } catch (_) {}
+  }
+  return achou;
+}
+
+function listarDuvidasMedQuest(chatIdDestino, messageId) {
+  var destino = chatIdDestino || ((typeof ConfigService !== "undefined" && ConfigService.getPrimary)
+    ? ConfigService.getPrimary("TELEGRAM_CHAT_ID")
+    : "");
+  if (typeof ehUsuarioTitular === "function" && !ehUsuarioTitular(destino)) {
+    return false;
+  }
+
+  var todas = obterDuvidasEstudoLocal();
+  var pendentes = todas.filter(function(d) { return d && !d.resolvida; });
+
+  var msg = "🧠 *BANCO LOCAL DE DÚVIDAS · MEDQUEST & ESTUDO ATIVO*\n\n";
+  var linhas = [];
+
+  if (pendentes.length === 0) {
+    msg += "✨ Nenhuma dúvida pendente no momento!\n\n" +
+      "💡 Para registrar uma nova dúvida durante o plantão, envie:\n`/duvida <sua dúvida clínica>`";
+  } else {
+    msg += "Você tem *" + pendentes.length + " dúvida(s) pendente(s)* para revisar no seu bloco de estudo:\n\n";
+    var exibidas = pendentes.slice(0, 8);
+    for (var i = 0; i < exibidas.length; i++) {
+      var d = exibidas[i];
+      var resumo = String(d.texto || "").replace(/[*_`]/g, "");
+      if (resumo.length > 90) resumo = resumo.slice(0, 87) + "...";
+      msg += (i + 1) + ") " + resumo + (d.dataISO ? " _(" + d.dataISO + ")_" : "") + "\n";
+      linhas.push([{ text: "✅ Resolver #" + (i + 1), callback_data: "duvida:check:" + d.id }]);
+    }
+  }
+
+  linhas.push([
+    { text: "🔄 Atualizar", callback_data: "ux:rotina:duvidas_lista" },
+    { text: "🔙 Central de Rotina", callback_data: "ux:hub:rotina" }
+  ]);
+  linhas.push([{ text: "🏠 Início", callback_data: "ux:hub:inicio" }]);
+
+  var kb = { inline_keyboard: linhas };
+  if (messageId && typeof enviarTelaBot === "function") {
+    return enviarTelaBot(destino, msg, kb, messageId);
+  }
+  return enviarMensagemComTecladoParaChat(destino, msg, kb);
 }

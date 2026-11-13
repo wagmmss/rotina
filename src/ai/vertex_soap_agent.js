@@ -8,7 +8,7 @@ const { VertexSoapOutputSchema } = require('../clinical/schemas/soap.schema.js')
 const DEFAULT_PROJECT_ID = 'gen-lang-client-0798056953';
 const DEFAULT_LOCATION = process.env.VERTEX_LOCATION || 'global';
 const DEFAULT_MODEL = process.env.VERTEX_MODEL || 'gemini-4-argon';
-const FALLBACK_MODEL = process.env.VERTEX_FALLBACK_MODEL || 'gemini-2.5-pro';
+const FALLBACK_MODEL = process.env.VERTEX_FALLBACK_MODEL || 'gemini-4-hydrogen';
 const REQUEST_TIMEOUT_MS = 30000;
 
 let cachedToken = null;
