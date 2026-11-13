@@ -1,7 +1,82 @@
 'use strict';
 
+const https = require('https');
+
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const MAX_MESSAGE_LEN = 3900;
+
+// Persistent Keep-Alive Agent (90s LIFO) so button clicks reuse warm TLS sockets to api.telegram.org
+// with 0ms DNS/TCP/TLS handshake latency even when clicks are separated by >4 seconds.
+const telegramKeepAliveAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 90000,
+  maxSockets: 32,
+  maxFreeSockets: 16,
+  scheduling: 'lifo',
+  timeout: 60000
+});
+
+const answeredCallbacksCache = new Map();
+
+function markCallbackAnswered(callbackQueryId) {
+  if (!callbackQueryId) return false;
+  const key = String(callbackQueryId);
+  const now = Date.now();
+  const prev = answeredCallbacksCache.get(key);
+  if (prev && (now - prev) < 30000) {
+    return false; // Already answered
+  }
+  answeredCallbacksCache.set(key, now);
+  if (answeredCallbacksCache.size > 500) {
+    for (const [k, ts] of answeredCallbacksCache.entries()) {
+      if (now - ts > 30000) answeredCallbacksCache.delete(k);
+    }
+  }
+  return true;
+}
+
+function postHttpsKeepAlive(urlStr, bodyStr, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(urlStr);
+    const bodyBuf = Buffer.from(bodyStr, 'utf8');
+    const req = https.request(
+      {
+        protocol: parsedUrl.protocol,
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || 443,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: 'POST',
+        agent: telegramKeepAliveAgent,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': bodyBuf.length,
+          'Connection': 'keep-alive'
+        },
+        timeout: timeoutMs
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({
+            ok: res.statusCode >= 200 && res.statusCode < 300,
+            status: res.statusCode || 500,
+            json: async () => JSON.parse(text || '{}')
+          });
+        });
+      }
+    );
+    req.on('timeout', () => {
+      const err = new Error('Request timed out');
+      err.name = 'AbortError';
+      req.destroy(err);
+    });
+    req.on('error', (err) => reject(err));
+    req.write(bodyBuf);
+    req.end();
+  });
+}
 
 function sleepAsync(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
@@ -54,7 +129,7 @@ async function postTelegramMethodAsync(token, method, payload, options = {}) {
     return { ok: false, statusCode: 400, description: 'Missing token or method' };
   }
 
-  const fetchFn = options.fetchImpl || global.fetch;
+  const customFetch = options.fetchImpl || null;
   const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 8000;
   const maxRetries429 = Number.isFinite(options.maxRetries429) ? options.maxRetries429 : 1;
   const url = `${TELEGRAM_API_BASE}/bot${token}/${method}`;
@@ -68,12 +143,15 @@ async function postTelegramMethodAsync(token, method, payload, options = {}) {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const res = await fetchFn(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' },
-        body: JSON.stringify(attemptBody),
-        signal: controller.signal
-      });
+      const bodyStr = JSON.stringify(attemptBody);
+      const res = customFetch
+        ? await customFetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' },
+            body: bodyStr,
+            signal: controller.signal
+          })
+        : await postHttpsKeepAlive(url, bodyStr, timeoutMs);
       clearTimeout(timer);
 
       let data = null;
@@ -122,6 +200,9 @@ async function postTelegramMethodAsync(token, method, payload, options = {}) {
 
 async function answerCallbackQueryFast(token, callbackQueryId, text = '', showAlert = false, options = {}) {
   if (!token || !callbackQueryId) return { ok: false, skipped: true };
+  if (!options.fetchImpl && !markCallbackAnswered(callbackQueryId)) {
+    return { ok: true, statusCode: 200, deduplicated: true };
+  }
   return postTelegramMethodAsync(
     token,
     'answerCallbackQuery',
@@ -246,6 +327,74 @@ class PerChatAsyncQueue {
   }
 }
 
+function dispatchTelegramFastFromVm(url, options = {}) {
+  if (!url || typeof url !== 'string' || options.syncResponse === true) {
+    return null;
+  }
+  const match = url.match(/^https:\/\/api\.telegram\.org\/bot([^/]+)\/(answerCallbackQuery|sendChatAction|editMessageText|editMessageReplyMarkup|deleteMessage|sendMessage)$/);
+  if (!match) {
+    return null;
+  }
+
+  const token = match[1];
+  const tgMethod = match[2];
+  let payload = {};
+  if (options.payload) {
+    if (typeof options.payload === 'string') {
+      try {
+        payload = JSON.parse(options.payload);
+      } catch (_) {
+        return null;
+      }
+    } else if (typeof options.payload === 'object' && !Buffer.isBuffer(options.payload)) {
+      payload = options.payload;
+    } else {
+      return null;
+    }
+  }
+
+  if (tgMethod === 'answerCallbackQuery') {
+    setImmediate(() => {
+      answerCallbackQueryFast(token, payload.callback_query_id, payload.text || '', Boolean(payload.show_alert), { fetchImpl: options.fetchImpl }).catch(() => {});
+    });
+  } else if (tgMethod === 'sendChatAction') {
+    setImmediate(() => {
+      sendChatActionFast(token, payload.chat_id, payload.action || 'typing', { fetchImpl: options.fetchImpl }).catch(() => {});
+    });
+  } else if (tgMethod === 'editMessageText') {
+    queueMicrotask(() => {
+      editMessageInPlace(token, payload.chat_id, payload.message_id, payload.text, {
+        parseMode: payload.parse_mode,
+        replyMarkup: payload.reply_markup,
+        fallbackToSend: true,
+        fetchImpl: options.fetchImpl
+      }).catch(() => {});
+    });
+  } else {
+    queueMicrotask(() => {
+      postTelegramMethodAsync(token, tgMethod, payload, { fetchImpl: options.fetchImpl }).catch(() => {});
+    });
+  }
+
+  const syntheticBody = JSON.stringify({
+    ok: true,
+    result: tgMethod === 'answerCallbackQuery' || tgMethod === 'sendChatAction' || tgMethod === 'deleteMessage'
+      ? true
+      : { message_id: Number(payload.message_id) || 1 }
+  });
+
+  return {
+    getResponseCode: () => 200,
+    getContentText: () => syntheticBody,
+    getHeaders: () => ({ 'content-type': 'application/json' }),
+    getBlob: () => ({
+      getBytes: () => Buffer.from(syntheticBody),
+      getContentType: () => 'application/json',
+      getName: () => 'telegram_fast'
+    })
+  };
+}
+
 module.exports = {
   TELEGRAM_API_BASE,
   MAX_MESSAGE_LEN,
@@ -256,5 +405,7 @@ module.exports = {
   sendChatActionFast,
   sendMessageChunked,
   editMessageInPlace,
+  dispatchTelegramFastFromVm,
   PerChatAsyncQueue
 };
+

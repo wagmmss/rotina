@@ -137,7 +137,10 @@ function doPost(e) {
   if (u.callback_query) {
     destravarCallbackTelegramImediato(u.callback_query);
   }
-  enfileirarUpdate(u);
+  var jaEnfileirado = !!(e && e.parameter && e.parameter.preEnqueued === "1");
+  if (!jaEnfileirado) {
+    enfileirarUpdate(u);
+  }
   if (processarNavegacaoRapida(u)) return HtmlService.createHtmlOutput("OK");
   if (ConfigService.get("TELEGRAM_ASYNC_WORKER") !== "true") {
     processarFilaTelegram();
@@ -145,11 +148,36 @@ function doPost(e) {
   return HtmlService.createHtmlOutput("OK");
 }
 
+function ehCallbackLentoIA_(data) {
+  if (!data) return false;
+  var d = String(data);
+  return (
+    d.indexOf("ux:soap:plano") === 0 ||
+    d.indexOf("ux:soap:ef_confirmar") === 0 ||
+    d.indexOf("ux:soap:ef_normal") === 0 ||
+    d.indexOf("ux:soap:atualizar") === 0 ||
+    d.indexOf("ux:soap:extrair_rx") === 0 ||
+    d.indexOf("gerarRound_") === 0 ||
+    d.indexOf("incorporarSoap_") === 0 ||
+    d.indexOf("incorporarLaudoSoap_") === 0 ||
+    d.indexOf("rx_med:") === 0 ||
+    d.indexOf("ouvirPreceptor_") === 0 ||
+    d.indexOf("preceptor_gerar_soap") === 0 ||
+    d.indexOf("preceptor_retomar_") === 0 ||
+    d === "enfermaria_passagem" ||
+    d === "ux:enf:sbar"
+  );
+}
+
 function destravarCallbackTelegramImediato(cb) {
   if (!cb || !cb.id) return;
   try {
     var data = String(cb.data || "");
-    var toast = "";
+    // Para botões instantâneos de menu/calculadoras/rotina, não desperdiça round-trips síncronos
+    // com sendChatAction('typing') nem consome o callback_query.id antes do toast específico do handler.
+    if (!ehCallbackLentoIA_(data)) return;
+
+    var toast = "⏳ Processando com IA...";
     if (data.indexOf("ux:soap:plano") === 0) {
       toast = "📋 Consolidando caso e gerando Avaliação e Plano...";
     } else if (data.indexOf("ux:soap:ef_confirmar") === 0) {
@@ -158,12 +186,13 @@ function destravarCallbackTelegramImediato(cb) {
       toast = "🩺 Confirmando exame físico normal...";
     } else if (data.indexOf("ux:soap:atualizar") === 0) {
       toast = "🔄 Atualizando resumo clínico...";
-    } else if (data.indexOf("ef_") === 0 || data === "ef_menu") {
-      toast = "🔬 Abrindo exames físicos...";
+    } else if (data.indexOf("ouvirPreceptor_") === 0) {
+      toast = "🎧 Gerando áudio do preceptor...";
     }
     responderCallbackTelegram(cb.id, toast);
     if (cb.message && cb.message.chat && cb.message.chat.id) {
-      enviarChatAction(cb.message.chat.id, "typing");
+      var acao = data.indexOf("ouvirPreceptor_") === 0 ? "record_voice" : "typing";
+      enviarChatAction(cb.message.chat.id, acao);
     }
   } catch (e) {}
 }

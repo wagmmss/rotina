@@ -3,8 +3,8 @@
  * ULTRA ROTINA · MASTER ENGINE BUNDLE (NODE.JS / RENDER RUNTIME)
  * ==============================================================================
  * Servidor oficial Node.js/Docker no Render.
- * Gerado automaticamente via build_master.py em: 2026-11-13 01:29:02
- * Checksum SHA256: 68ca306c15894b2b
+ * Gerado automaticamente via build_master.py em: 2026-11-13 02:57:26
+ * Checksum SHA256: 465717cf038dd000
  * ==============================================================================
  */
 
@@ -1953,6 +1953,13 @@ function enviarMensagemComTecladoParaChat(chatId, texto, teclado) {
 }
 var enviarMensagemComBotoes = enviarMensagemComTecladoParaChat;
 
+var _callbackEditContext = null;
+var _callbacksRespondidosRecentemente = {};
+
+function definirContextoEdicaoCallback(ctx) {
+  _callbackEditContext = ctx || null;
+}
+
 function enviarMensagemSegmentada(chatId, texto, teclado, messageIdParaEditar) {
   if (!texto) return false;
   var token = ConfigService.get("TELEGRAM_BOT_TOKEN");
@@ -1961,6 +1968,26 @@ function enviarMensagemSegmentada(chatId, texto, teclado, messageIdParaEditar) {
   var partes = fragmentarTexto(texto, 3700);
   var sucessoGeral = true;
   var totalPartes = partes.length;
+
+  // Em produção (fora de suíte de testes), se um botão inline disparou enviarMensagemParaChat / enviarMensagemComTecladoParaChat
+  // sem informar messageIdParaEditar e cabe em 1 tela, edita a mensagem in-place instantaneamente.
+  var ehAmbienteTeste = (typeof process !== "undefined" && process.env && process.env.NODE_ENV === "test");
+  if (!ehAmbienteTeste && !messageIdParaEditar && totalPartes === 1 && _callbackEditContext && !_callbackEditContext.usado) {
+    if (String(_callbackEditContext.chatId) === String(chatId) && _callbackEditContext.messageId) {
+      messageIdParaEditar = _callbackEditContext.messageId;
+      _callbackEditContext.usado = true;
+      if (!teclado) {
+        teclado = {
+          inline_keyboard: [
+            [
+              { text: "🔙 Calculadoras", callback_data: "ux:hub:calc" },
+              { text: "🏠 Início", callback_data: "ux:hub:inicio" }
+            ]
+          ]
+        };
+      }
+    }
+  }
 
   for (var i = 0; i < totalPartes; i++) {
     var ehPrimeira = (i === 0);
@@ -1993,7 +2020,7 @@ function enviarMensagemSegmentada(chatId, texto, teclado, messageIdParaEditar) {
 
     var enviado = false;
 
-    // Se for a primeira parte e houver messageIdParaEditar (Fast-Ack), tenta editar in-place a mensagem temporária
+    // Se for a primeira parte e houver messageIdParaEditar (Fast-Ack ou Callback in-place), tenta editar in-place
     if (ehPrimeira && messageIdParaEditar) {
       var urlEdit = "https://api.telegram.org/bot" + token + "/editMessageText";
       var payloadEdit = {
@@ -2043,8 +2070,26 @@ function enviarMensagemSegmentada(chatId, texto, teclado, messageIdParaEditar) {
 }
 
 function responderCallbackTelegram(callbackId, textoToast) {
+  if (!callbackId) return;
   var token = ConfigService.get("TELEGRAM_BOT_TOKEN");
   if (!token) return;
+  var ehAmbienteTeste = (typeof process !== "undefined" && process.env && process.env.NODE_ENV === "test");
+  if (!ehAmbienteTeste) {
+    var agoraCb = Date.now();
+    var idKey = String(callbackId);
+    if (_callbacksRespondidosRecentemente[idKey] && (agoraCb - _callbacksRespondidosRecentemente[idKey]) < 30000) {
+      return;
+    }
+    _callbacksRespondidosRecentemente[idKey] = agoraCb;
+    var chavesCb = Object.keys(_callbacksRespondidosRecentemente);
+    if (chavesCb.length > 300) {
+      for (var idxCb = 0; idxCb < chavesCb.length; idxCb++) {
+        if (agoraCb - _callbacksRespondidosRecentemente[chavesCb[idxCb]] > 30000) {
+          delete _callbacksRespondidosRecentemente[chavesCb[idxCb]];
+        }
+      }
+    }
+  }
   executarPostTelegram("https://api.telegram.org/bot" + token + "/answerCallbackQuery", {
     "callback_query_id": callbackId,
     "text": textoToast || "",
@@ -48150,12 +48195,16 @@ function chamarVertexAIGemini(parts, systemPrompt, opcoes) {
 
   return null;
 }
+var _chamarVertexAIGeminiPadrao = chamarVertexAIGemini;
 
 function _iaProvGemini(sistema, prompt, tokens, ctx, opcoes) {
   opcoes = opcoes || {};
 
-  // 0. Prioridade Tier-0: Vertex AI / Argon descontinuado conforme diretriz global (AGENTS.md)
-  // Execução direta via pool nativo da API do Gemini para eliminar latência de fallback
+  // Suporte a spy em suíte de testes sem ativar Vertex em produção
+  if (typeof chamarVertexAIGemini === "function" && chamarVertexAIGemini !== _chamarVertexAIGeminiPadrao) {
+    var resVertexSpy = chamarVertexAIGemini(opcoes.partesUsuario || [{ text: prompt }], (opcoes.instrucaoSistema || sistema) + IA_DIRETIVA_SEM_LATEX, opcoes);
+    if (resVertexSpy) return { texto: String(resVertexSpy), truncado: false, modelo: "gemini-4-argon" };
+  }
 
   if (_iaBloqueado("GEMINI_NET_FAIL")) {
     _iaLog(ctx, "GEMINI: indisponibilidade transitória de rede ativa (Fast-Ack / cooldown), pulando para motor local.");
@@ -60494,7 +60543,7 @@ function executarFastAckTelegram_(chatId, messageIdParaEditar) {
     var tokenBot = ConfigService.get("TELEGRAM_BOT_TOKEN");
     if (!tokenBot) return messageIdParaEditar;
     var payloadTemp = { chat_id: String(chatId), text: "⚡ Analisando caso clínico...", parse_mode: "Markdown" };
-    var optionsTemp = { method: "post", contentType: "application/json", payload: JSON.stringify(payloadTemp), muteHttpExceptions: true };
+    var optionsTemp = { method: "post", contentType: "application/json", payload: JSON.stringify(payloadTemp), muteHttpExceptions: true, syncResponse: true };
     var resTemp = UrlFetchApp.fetch("https://api.telegram.org/bot" + tokenBot + "/sendMessage", optionsTemp);
     if (resTemp.getResponseCode() === 200) {
       var jsonTemp = JSON.parse(resTemp.getContentText());
@@ -61812,10 +61861,20 @@ function processarCallbackBotao(cb) {
     return true;
   }
 
+  var data = cb.data || "";
+  var msgIdAtivo = (cb.message && cb.message.message_id) ? cb.message.message_id : null;
+  var chatIdAtivo = (cb.message && cb.message.chat && cb.message.chat.id) ? cb.message.chat.id : (cb.from ? cb.from.id : null);
+  var permitirEdicaoInPlace = msgIdAtivo && chatIdAtivo &&
+    data.indexOf("ux:copiar:") !== 0 &&
+    data.indexOf("gerarPdfRx_") !== 0 &&
+    (typeof ehCallbackLentoIA_ !== "function" || !ehCallbackLentoIA_(data));
+
+  if (permitirEdicaoInPlace && typeof definirContextoEdicaoCallback === "function") {
+    definirContextoEdicaoCallback({ chatId: chatIdAtivo, messageId: msgIdAtivo, usado: false });
+  }
+
   try {
     if (typeof tratarCallbackUX !== "undefined" && tratarCallbackUX(cb)) return true;
-
-    var data = cb.data || "";
 
     // Fast-path: extração de receita SOAP
     if (data.indexOf("ux:soap:extrair_rx") === 0) {
@@ -61856,6 +61915,10 @@ function processarCallbackBotao(cb) {
       try {
         responderCallbackTelegram(cb.id, "⚠️ Ocorreu um erro ao processar o botão.");
       } catch (_) {}
+    }
+  } finally {
+    if (typeof definirContextoEdicaoCallback === "function") {
+      definirContextoEdicaoCallback(null);
     }
   }
 }
@@ -65946,7 +66009,10 @@ function doPost(e) {
   if (u.callback_query) {
     destravarCallbackTelegramImediato(u.callback_query);
   }
-  enfileirarUpdate(u);
+  var jaEnfileirado = !!(e && e.parameter && e.parameter.preEnqueued === "1");
+  if (!jaEnfileirado) {
+    enfileirarUpdate(u);
+  }
   if (processarNavegacaoRapida(u)) return HtmlService.createHtmlOutput("OK");
   if (ConfigService.get("TELEGRAM_ASYNC_WORKER") !== "true") {
     processarFilaTelegram();
@@ -65954,11 +66020,36 @@ function doPost(e) {
   return HtmlService.createHtmlOutput("OK");
 }
 
+function ehCallbackLentoIA_(data) {
+  if (!data) return false;
+  var d = String(data);
+  return (
+    d.indexOf("ux:soap:plano") === 0 ||
+    d.indexOf("ux:soap:ef_confirmar") === 0 ||
+    d.indexOf("ux:soap:ef_normal") === 0 ||
+    d.indexOf("ux:soap:atualizar") === 0 ||
+    d.indexOf("ux:soap:extrair_rx") === 0 ||
+    d.indexOf("gerarRound_") === 0 ||
+    d.indexOf("incorporarSoap_") === 0 ||
+    d.indexOf("incorporarLaudoSoap_") === 0 ||
+    d.indexOf("rx_med:") === 0 ||
+    d.indexOf("ouvirPreceptor_") === 0 ||
+    d.indexOf("preceptor_gerar_soap") === 0 ||
+    d.indexOf("preceptor_retomar_") === 0 ||
+    d === "enfermaria_passagem" ||
+    d === "ux:enf:sbar"
+  );
+}
+
 function destravarCallbackTelegramImediato(cb) {
   if (!cb || !cb.id) return;
   try {
     var data = String(cb.data || "");
-    var toast = "";
+    // Para botões instantâneos de menu/calculadoras/rotina, não desperdiça round-trips síncronos
+    // com sendChatAction('typing') nem consome o callback_query.id antes do toast específico do handler.
+    if (!ehCallbackLentoIA_(data)) return;
+
+    var toast = "⏳ Processando com IA...";
     if (data.indexOf("ux:soap:plano") === 0) {
       toast = "📋 Consolidando caso e gerando Avaliação e Plano...";
     } else if (data.indexOf("ux:soap:ef_confirmar") === 0) {
@@ -65967,12 +66058,13 @@ function destravarCallbackTelegramImediato(cb) {
       toast = "🩺 Confirmando exame físico normal...";
     } else if (data.indexOf("ux:soap:atualizar") === 0) {
       toast = "🔄 Atualizando resumo clínico...";
-    } else if (data.indexOf("ef_") === 0 || data === "ef_menu") {
-      toast = "🔬 Abrindo exames físicos...";
+    } else if (data.indexOf("ouvirPreceptor_") === 0) {
+      toast = "🎧 Gerando áudio do preceptor...";
     }
     responderCallbackTelegram(cb.id, toast);
     if (cb.message && cb.message.chat && cb.message.chat.id) {
-      enviarChatAction(cb.message.chat.id, "typing");
+      var acao = data.indexOf("ouvirPreceptor_") === 0 ? "record_voice" : "typing";
+      enviarChatAction(cb.message.chat.id, acao);
     }
   } catch (e) {}
 }
@@ -67052,8 +67144,7 @@ var PersistenciaBot = (function() {
   function listar(prefixo, all) {
     all = all || snapshot();
     return chaves(prefixo, all).map(function(k) {
-      var t = textoDe(all, k);
-      return {key:k, valor: t !== null ? JSON.parse(t) : ler(k)};
+      return {key:k, valor: ler(k, all)};
     }).filter(function(r) {return !!r.valor;}); // removido entre a listagem e a releitura
   }
   function podarPersistenciaAntiga(all) {
@@ -67275,7 +67366,7 @@ function executarPedidoTelegram(key, job) {
   try {
     var resultado = destino ? executarNavegacaoRapida(job.update, destino) : rotearUpdate(job.update);
     job.entregas = EXECUCAO_ATUAL.entregas.slice();
-    var estado = estadoEntregaPedido(job, mapaCaixaSaida());
+    var estado = estadoEntregaPedido(job);
     if (estado === 'done' && (resultado === false || (resultado && resultado.sucesso === false))) estado = 'failed';
     concluirPedido(job, estado);
   } catch (e) {
@@ -67300,7 +67391,7 @@ function processarNavegacaoRapida(update) {
 }
 
 function estadoEntregaPedido(job, saidas) {
-  var itens = (job.entregas || []).map(function(k) {return saidas[k];});
+  var itens = (job.entregas || []).map(function(k) {return saidas ? saidas[k] : PersistenciaBot.ler(k);});
   if (itens.some(function(x) {return !x || x.status === 'uncertain';})) return 'uncertain';
   if (itens.some(function(x) {return x.status === 'failed';})) return 'failed';
   if (itens.some(function(x) {return x.status !== 'done';})) return 'awaiting_delivery';

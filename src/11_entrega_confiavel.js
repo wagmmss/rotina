@@ -115,8 +115,7 @@ var PersistenciaBot = (function() {
   function listar(prefixo, all) {
     all = all || snapshot();
     return chaves(prefixo, all).map(function(k) {
-      var t = textoDe(all, k);
-      return {key:k, valor: t !== null ? JSON.parse(t) : ler(k)};
+      return {key:k, valor: ler(k, all)};
     }).filter(function(r) {return !!r.valor;}); // removido entre a listagem e a releitura
   }
   function podarPersistenciaAntiga(all) {
@@ -338,7 +337,7 @@ function executarPedidoTelegram(key, job) {
   try {
     var resultado = destino ? executarNavegacaoRapida(job.update, destino) : rotearUpdate(job.update);
     job.entregas = EXECUCAO_ATUAL.entregas.slice();
-    var estado = estadoEntregaPedido(job, mapaCaixaSaida());
+    var estado = estadoEntregaPedido(job);
     if (estado === 'done' && (resultado === false || (resultado && resultado.sucesso === false))) estado = 'failed';
     concluirPedido(job, estado);
   } catch (e) {
@@ -363,7 +362,7 @@ function processarNavegacaoRapida(update) {
 }
 
 function estadoEntregaPedido(job, saidas) {
-  var itens = (job.entregas || []).map(function(k) {return saidas[k];});
+  var itens = (job.entregas || []).map(function(k) {return saidas ? saidas[k] : PersistenciaBot.ler(k);});
   if (itens.some(function(x) {return !x || x.status === 'uncertain';})) return 'uncertain';
   if (itens.some(function(x) {return x.status === 'failed';})) return 'failed';
   if (itens.some(function(x) {return x.status !== 'done';})) return 'awaiting_delivery';

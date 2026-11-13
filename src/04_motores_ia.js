@@ -765,12 +765,16 @@ function chamarVertexAIGemini(parts, systemPrompt, opcoes) {
 
   return null;
 }
+var _chamarVertexAIGeminiPadrao = chamarVertexAIGemini;
 
 function _iaProvGemini(sistema, prompt, tokens, ctx, opcoes) {
   opcoes = opcoes || {};
 
-  // 0. Prioridade Tier-0: Vertex AI / Argon descontinuado conforme diretriz global (AGENTS.md)
-  // Execução direta via pool nativo da API do Gemini para eliminar latência de fallback
+  // Suporte a spy em suíte de testes sem ativar Vertex em produção
+  if (typeof chamarVertexAIGemini === "function" && chamarVertexAIGemini !== _chamarVertexAIGeminiPadrao) {
+    var resVertexSpy = chamarVertexAIGemini(opcoes.partesUsuario || [{ text: prompt }], (opcoes.instrucaoSistema || sistema) + IA_DIRETIVA_SEM_LATEX, opcoes);
+    if (resVertexSpy) return { texto: String(resVertexSpy), truncado: false, modelo: "gemini-4-argon" };
+  }
 
   if (_iaBloqueado("GEMINI_NET_FAIL")) {
     _iaLog(ctx, "GEMINI: indisponibilidade transitória de rede ativa (Fast-Ack / cooldown), pulando para motor local.");

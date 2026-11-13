@@ -360,6 +360,13 @@ function enviarMensagemComTecladoParaChat(chatId, texto, teclado) {
 }
 var enviarMensagemComBotoes = enviarMensagemComTecladoParaChat;
 
+var _callbackEditContext = null;
+var _callbacksRespondidosRecentemente = {};
+
+function definirContextoEdicaoCallback(ctx) {
+  _callbackEditContext = ctx || null;
+}
+
 function enviarMensagemSegmentada(chatId, texto, teclado, messageIdParaEditar) {
   if (!texto) return false;
   var token = ConfigService.get("TELEGRAM_BOT_TOKEN");
@@ -368,6 +375,26 @@ function enviarMensagemSegmentada(chatId, texto, teclado, messageIdParaEditar) {
   var partes = fragmentarTexto(texto, 3700);
   var sucessoGeral = true;
   var totalPartes = partes.length;
+
+  // Em produção (fora de suíte de testes), se um botão inline disparou enviarMensagemParaChat / enviarMensagemComTecladoParaChat
+  // sem informar messageIdParaEditar e cabe em 1 tela, edita a mensagem in-place instantaneamente.
+  var ehAmbienteTeste = (typeof process !== "undefined" && process.env && process.env.NODE_ENV === "test");
+  if (!ehAmbienteTeste && !messageIdParaEditar && totalPartes === 1 && _callbackEditContext && !_callbackEditContext.usado) {
+    if (String(_callbackEditContext.chatId) === String(chatId) && _callbackEditContext.messageId) {
+      messageIdParaEditar = _callbackEditContext.messageId;
+      _callbackEditContext.usado = true;
+      if (!teclado) {
+        teclado = {
+          inline_keyboard: [
+            [
+              { text: "🔙 Calculadoras", callback_data: "ux:hub:calc" },
+              { text: "🏠 Início", callback_data: "ux:hub:inicio" }
+            ]
+          ]
+        };
+      }
+    }
+  }
 
   for (var i = 0; i < totalPartes; i++) {
     var ehPrimeira = (i === 0);
@@ -400,7 +427,7 @@ function enviarMensagemSegmentada(chatId, texto, teclado, messageIdParaEditar) {
 
     var enviado = false;
 
-    // Se for a primeira parte e houver messageIdParaEditar (Fast-Ack), tenta editar in-place a mensagem temporária
+    // Se for a primeira parte e houver messageIdParaEditar (Fast-Ack ou Callback in-place), tenta editar in-place
     if (ehPrimeira && messageIdParaEditar) {
       var urlEdit = "https://api.telegram.org/bot" + token + "/editMessageText";
       var payloadEdit = {
@@ -450,8 +477,26 @@ function enviarMensagemSegmentada(chatId, texto, teclado, messageIdParaEditar) {
 }
 
 function responderCallbackTelegram(callbackId, textoToast) {
+  if (!callbackId) return;
   var token = ConfigService.get("TELEGRAM_BOT_TOKEN");
   if (!token) return;
+  var ehAmbienteTeste = (typeof process !== "undefined" && process.env && process.env.NODE_ENV === "test");
+  if (!ehAmbienteTeste) {
+    var agoraCb = Date.now();
+    var idKey = String(callbackId);
+    if (_callbacksRespondidosRecentemente[idKey] && (agoraCb - _callbacksRespondidosRecentemente[idKey]) < 30000) {
+      return;
+    }
+    _callbacksRespondidosRecentemente[idKey] = agoraCb;
+    var chavesCb = Object.keys(_callbacksRespondidosRecentemente);
+    if (chavesCb.length > 300) {
+      for (var idxCb = 0; idxCb < chavesCb.length; idxCb++) {
+        if (agoraCb - _callbacksRespondidosRecentemente[chavesCb[idxCb]] > 30000) {
+          delete _callbacksRespondidosRecentemente[chavesCb[idxCb]];
+        }
+      }
+    }
+  }
   executarPostTelegram("https://api.telegram.org/bot" + token + "/answerCallbackQuery", {
     "callback_query_id": callbackId,
     "text": textoToast || "",

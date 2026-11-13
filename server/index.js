@@ -1541,9 +1541,16 @@ async function buildServer() {
         return { ok: false, erro: 'Fila cheia' };
       }
 
+      const ehNavegacaoEstatica = !!(runtime.ctx && typeof runtime.ctx.destinoNavegacaoRapida === 'function' && runtime.ctx.destinoNavegacaoRapida(updateData));
+      const ehBotaoCallback = !!updateData.callback_query;
+      const textoMsg = updateData.message && typeof updateData.message.text === 'string' ? updateData.message.text.trim().toLowerCase() : '';
+      const ehComandoRapido = textoMsg && /^\/(?:menu|hub|start|ajuda|cancelar|novo|leito|rotina|agenda|cockpit|pcr|dva|gaso|crcl|clcr|clearance|ctg|dengue|curb|pancreatite|sca|colestase|swansea)(?:\s|$)/i.test(textoMsg);
+      const isFastLane = ehNavegacaoEstatica || ehBotaoCallback || ehComandoRapido;
+
       const fakeGasEvent = {
         parameter: {
-          secret: secretEsperado
+          secret: secretEsperado,
+          preEnqueued: '1'
         },
         postData: {
           contents: JSON.stringify(updateData)
@@ -1559,6 +1566,8 @@ async function buildServer() {
           novo = runtime.ctx.enfileirarUpdate(updateData);
           if (process.env.NODE_ENV === 'test') {
             runtime.persistirPropriedades(true);
+          } else if (isFastLane) {
+            runtime.persistirPropriedades(false);
           } else {
             await runtime.persistirPropriedadesAsync();
           }
@@ -1570,29 +1579,21 @@ async function buildServer() {
       }
       if (!novo) return { ok: true, duplicate: true };
 
-      // Fast-Ack assíncrono (<20ms): destrava spinner de callback e dispara chatAction sem aguardar o processamento completo
+      // Fast-Ack assíncrono (<20ms): para mensagens de texto/mídia fora da via rápida, dispara chatAction imediato.
+      // Para callback_query, o próprio handler do botão já envia o answerCallbackQuery específico em <1ms via socket keep-alive!
       const ehTeste = process.env.NODE_ENV === 'test' || (runtime.ctx && runtime.ctx.ConfigService && runtime.ctx.ConfigService.get('NODE_ENV') === 'test');
       const tokenBot = runtime.ctx?.ConfigService?.get('TELEGRAM_BOT_TOKEN');
       const chatAlvoId = updateData.message?.chat?.id || updateData.callback_query?.message?.chat?.id;
       if (!ehTeste && tokenBot) {
-        if (updateData.callback_query?.id) {
-          telegramGateway.answerCallbackQueryFast(tokenBot, updateData.callback_query.id, '').catch(() => {});
-        }
-        if (chatAlvoId && updateData.message) {
+        if (chatAlvoId && updateData.message && !ehComandoRapido) {
           const acao = (updateData.message?.voice || updateData.message?.audio) ? 'record_voice' : 'typing';
           telegramGateway.sendChatActionFast(tokenBot, chatAlvoId, acao).catch(() => {});
         }
       }
 
-      const ehNavegacaoEstatica = !!(runtime.ctx && typeof runtime.ctx.destinoNavegacaoRapida === 'function' && runtime.ctx.destinoNavegacaoRapida(updateData));
-      const ehBotaoCallback = !!updateData.callback_query;
-      const textoMsg = updateData.message && typeof updateData.message.text === 'string' ? updateData.message.text.trim().toLowerCase() : '';
-      const ehComandoRapido = textoMsg && /^\/(?:menu|hub|start|ajuda|cancelar|novo|leito|rotina|agenda|cockpit|pcr|dva|gaso|crcl|clcr|clearance|ctg|dengue|curb|pancreatite|sca|colestase|swansea)(?:\s|$)/i.test(textoMsg);
-      const isFastLane = ehNavegacaoEstatica || ehBotaoCallback || ehComandoRapido;
-
       const chatKey = String(chatAlvoId || chatIdRemetente || 'default');
       const queueItem = { fakeGasEvent, updateId, t0, enqueuedAt: performance.now(), kind: updateKind(updateData), isFastLane, chatKey };
-      setImmediate(() => {
+      const dispatchWebhook = () => {
         const queued = webhookPerChatQueue.enqueue(chatKey, () => processWebhookItem(queueItem), { fastLane: isFastLane });
         if (!queued || !queued.accepted) {
           fastify.log.warn(`[Webhook Fila Rejeitada] Update ${updateId}: ${queued ? queued.reason : 'erro'}`);
@@ -1603,7 +1604,12 @@ async function buildServer() {
             fastify.log.error(`[Webhook Fila Erro] Update ${updateId}: ${err.message}`);
           });
         }
-      });
+      };
+      if (isFastLane && !ehTeste) {
+        dispatchWebhook();
+      } else {
+        setImmediate(dispatchWebhook);
+      }
 
       const elapsed = (performance.now() - t0).toFixed(2);
       fastify.log.info(`[Webhook Telegram] Update ${updateId}${isFastLane ? ' (fast-lane)' : ''} enfileirado em ${elapsed}ms. Fila: ${webhookPerChatQueue.getTotalPending()} item(ns).`);

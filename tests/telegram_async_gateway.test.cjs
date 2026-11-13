@@ -11,6 +11,7 @@ const {
   sendChatActionFast,
   sendMessageChunked,
   editMessageInPlace,
+  dispatchTelegramFastFromVm,
   PerChatAsyncQueue
 } = require('../server/telegram-gateway.js');
 
@@ -291,14 +292,20 @@ test('Fastify POST /webhook enqueues callback_query and /menu in fast-lane under
 
   const { buildServer } = require('../server/index.js');
   const app = await buildServer();
+  const baseUid = Math.floor(Date.now() / 100) + Math.floor(Math.random() * 10000);
+  const uid1 = baseUid + 1;
+  const uid2 = baseUid + 2;
   try {
+    try { runtime.ctx.PersistenciaBot.remover('inbox_' + uid1); } catch (_) {}
+    try { runtime.ctx.PersistenciaBot.remover('inbox_' + uid2); } catch (_) {}
+
     const resCb = await app.inject({
       method: 'POST',
       url: '/webhook?secret=test-secret-gateway',
       payload: {
-        update_id: 888001,
+        update_id: uid1,
         callback_query: {
-          id: 'cb_gw_1',
+          id: 'cb_gw_' + uid1,
           from: { id: 1771571035 },
           message: { chat: { id: 1771571035 }, message_id: 10 },
           data: 'ux:hub:inicio'
@@ -312,7 +319,7 @@ test('Fastify POST /webhook enqueues callback_query and /menu in fast-lane under
       method: 'POST',
       url: '/webhook?secret=test-secret-gateway',
       payload: {
-        update_id: 888002,
+        update_id: uid2,
         message: {
           message_id: 12,
           chat: { id: 1771571035, type: 'private' },
@@ -328,6 +335,8 @@ test('Fastify POST /webhook enqueues callback_query and /menu in fast-lane under
     await new Promise((r) => setTimeout(r, 80));
     assert.ok(sentMessages.length >= 1, 'Queue should process enqueued updates without throwing');
   } finally {
+    try { runtime.ctx.PersistenciaBot.remover('inbox_' + uid1); } catch (_) {}
+    try { runtime.ctx.PersistenciaBot.remover('inbox_' + uid2); } catch (_) {}
     await app.close();
     process.env.NODE_ENV = prevEnv;
     if (prevSecretProp === null || prevSecretProp === undefined) props.deleteProperty('WEBHOOK_SECRET');
@@ -339,3 +348,26 @@ test('Fastify POST /webhook enqueues callback_query and /menu in fast-lane under
     }
   }
 });
+
+test('dispatchTelegramFastFromVm returns synthetic 200 OK in <2ms without blocking V8', () => {
+  const mockFetch = async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) });
+  const t0 = performance.now();
+  const res = dispatchTelegramFastFromVm('https://api.telegram.org/botFAKE_TOKEN/answerCallbackQuery', {
+    method: 'post',
+    fetchImpl: mockFetch,
+    payload: JSON.stringify({ callback_query_id: 'cb_bench_fast_1', text: 'Instantâneo' })
+  });
+  const elapsedMs = performance.now() - t0;
+  assert.ok(res, 'Should return synthetic response object for Telegram API URL');
+  assert.equal(res.getResponseCode(), 200);
+  assert.ok(elapsedMs < 2, `Expected <2ms non-blocking dispatch, took ${elapsedMs.toFixed(2)}ms`);
+
+  // Sync-required call (syncResponse: true) should return null so caller uses sync worker
+  const syncRes = dispatchTelegramFastFromVm('https://api.telegram.org/botFAKE_TOKEN/sendMessage', {
+    method: 'post',
+    syncResponse: true,
+    payload: JSON.stringify({ chat_id: '123', text: 'sync' })
+  });
+  assert.equal(syncRes, null);
+});
+

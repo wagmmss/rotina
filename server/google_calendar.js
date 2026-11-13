@@ -404,14 +404,33 @@ class GoogleCalendarService {
 
   /**
    * Lista eventos entre duas datas de forma síncrona (usado pelo CalendarApp no runtime)
+   * Usa chave normalizada (janela de 5 min) e Stale-While-Revalidate para latência zero nos botões do Telegram.
    */
   listarEventosSync(inicio, fim, calendarId = 'primary') {
     const dInicio = inicio instanceof Date ? inicio : new Date(inicio);
     const dFim = fim instanceof Date ? fim : new Date(fim);
-    
-    const cacheKey = `${calendarId}_${dInicio.getTime()}_${dFim.getTime()}`;
+    const bucketMin = 5 * 60 * 1000;
+    const normInicio = Math.floor(dInicio.getTime() / bucketMin) * bucketMin;
+    const normFim = Math.ceil(dFim.getTime() / bucketMin) * bucketMin;
+
+    const cacheKey = `${calendarId}_${normInicio}_${normFim}`;
     const hit = this._cacheEventos.get(cacheKey);
-    if (hit && (Date.now() - hit.timestamp) < this._cacheTTL) {
+    if (hit) {
+      const ageMs = Date.now() - hit.timestamp;
+      if (ageMs < (this._cacheTTL || 120000)) {
+        return hit.eventos;
+      }
+      // Stale-While-Revalidate: retorna imediatamente da memória e atualiza em background
+      if (!hit.revalidating) {
+        hit.revalidating = true;
+        this.listarEventosAsync(dInicio, dFim, calendarId)
+          .then((eventosAtualizados) => {
+            this._cacheEventos.set(cacheKey, { timestamp: Date.now(), eventos: eventosAtualizados, revalidating: false });
+          })
+          .catch(() => {
+            hit.revalidating = false;
+          });
+      }
       return hit.eventos;
     }
 

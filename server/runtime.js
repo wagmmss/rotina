@@ -15,6 +15,7 @@ const { EventEmitter } = require('events');
 const syncFetch = require('sync-fetch');
 const { Worker } = require('worker_threads');
 const { googleCalendarInstance } = require('./google_calendar');
+const telegramGateway = require('./telegram-gateway');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DATA_DIR = process.env.BOT_DATA_DIR ? path.resolve(process.env.BOT_DATA_DIR) : path.resolve(ROOT_DIR, 'data');
@@ -740,13 +741,21 @@ const ctx = {
   UrlFetchApp: {
     fetch: (url, options = {}) => {
       // Bloqueio defensivo absoluto: Em ambiente de teste automatizado, nunca disparar chamadas reais ao Telegram
-      if ((process.env.NODE_ENV === 'test' || propsStore.NODE_ENV === 'test') && url.includes('api.telegram.org')) {
+      const ehModoTeste = process.env.NODE_ENV === 'test' || propsStore.NODE_ENV === 'test';
+      if (ehModoTeste && url.includes('api.telegram.org')) {
         return {
           getResponseCode: () => 200,
           getContentText: () => JSON.stringify({ ok: true, result: { message_id: 99999 } }),
           getHeaders: () => ({ 'content-type': 'application/json' }),
           getBlob: () => ({ getBytes: () => Buffer.from('{"ok":true}'), getContentType: () => 'application/json', getName: () => 'telegram_mock' })
         };
+      }
+
+      // Em produção real, despacha chamadas JSON do Telegram (answerCallbackQuery, editMessageText, sendMessage, etc.)
+      // de forma 100% não-bloqueante via socket HTTPS keep-alive persistente (zero Atomics.wait)
+      if (!ehModoTeste && url.includes('api.telegram.org')) {
+        const fastRes = telegramGateway.dispatchTelegramFastFromVm(url, options);
+        if (fastRes) return fastRes;
       }
 
       const method = (options.method || 'GET').toUpperCase();

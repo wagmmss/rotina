@@ -1090,10 +1090,20 @@ function processarCallbackBotao(cb) {
     return true;
   }
 
+  var data = cb.data || "";
+  var msgIdAtivo = (cb.message && cb.message.message_id) ? cb.message.message_id : null;
+  var chatIdAtivo = (cb.message && cb.message.chat && cb.message.chat.id) ? cb.message.chat.id : (cb.from ? cb.from.id : null);
+  var permitirEdicaoInPlace = msgIdAtivo && chatIdAtivo &&
+    data.indexOf("ux:copiar:") !== 0 &&
+    data.indexOf("gerarPdfRx_") !== 0 &&
+    (typeof ehCallbackLentoIA_ !== "function" || !ehCallbackLentoIA_(data));
+
+  if (permitirEdicaoInPlace && typeof definirContextoEdicaoCallback === "function") {
+    definirContextoEdicaoCallback({ chatId: chatIdAtivo, messageId: msgIdAtivo, usado: false });
+  }
+
   try {
     if (typeof tratarCallbackUX !== "undefined" && tratarCallbackUX(cb)) return true;
-
-    var data = cb.data || "";
 
     // Fast-path: extração de receita SOAP
     if (data.indexOf("ux:soap:extrair_rx") === 0) {
@@ -1134,6 +1144,10 @@ function processarCallbackBotao(cb) {
       try {
         responderCallbackTelegram(cb.id, "⚠️ Ocorreu um erro ao processar o botão.");
       } catch (_) {}
+    }
+  } finally {
+    if (typeof definirContextoEdicaoCallback === "function") {
+      definirContextoEdicaoCallback(null);
     }
   }
 }

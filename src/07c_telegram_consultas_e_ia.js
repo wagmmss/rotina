@@ -561,7 +561,7 @@ function executarFastAckTelegram_(chatId, messageIdParaEditar) {
     var tokenBot = ConfigService.get("TELEGRAM_BOT_TOKEN");
     if (!tokenBot) return messageIdParaEditar;
     var payloadTemp = { chat_id: String(chatId), text: "⚡ Analisando caso clínico...", parse_mode: "Markdown" };
-    var optionsTemp = { method: "post", contentType: "application/json", payload: JSON.stringify(payloadTemp), muteHttpExceptions: true };
+    var optionsTemp = { method: "post", contentType: "application/json", payload: JSON.stringify(payloadTemp), muteHttpExceptions: true, syncResponse: true };
     var resTemp = UrlFetchApp.fetch("https://api.telegram.org/bot" + tokenBot + "/sendMessage", optionsTemp);
     if (resTemp.getResponseCode() === 200) {
       var jsonTemp = JSON.parse(resTemp.getContentText());
