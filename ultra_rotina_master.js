@@ -3,8 +3,8 @@
  * ULTRA ROTINA · MASTER ENGINE BUNDLE (NODE.JS / RENDER RUNTIME)
  * ==============================================================================
  * Servidor oficial Node.js/Docker no Render.
- * Gerado automaticamente via build_master.py em: 2026-11-13 02:57:26
- * Checksum SHA256: 465717cf038dd000
+ * Gerado automaticamente via build_master.py em: 2026-11-14 18:51:29
+ * Checksum SHA256: bb43438c6e29600c
  * ==============================================================================
  */
 
@@ -2196,7 +2196,7 @@ function executarPostTelegram(url, payload) {
 
 function obterUrlCockpit(chatId) {
   var urlCustom = (typeof ConfigService !== "undefined") ? ConfigService.get("COCKPIT_WEB_URL") : null;
-  var base = urlCustom ? urlCustom.split("?")[0] : "https://wagmms.github.io/cockpit/";
+  var base = urlCustom ? urlCustom.split("?")[0] : "https://wagmmss.github.io/cockpit/";
   var id = chatId ? String(chatId) : ((typeof ConfigService !== "undefined" && ConfigService.getPrimary) ? ConfigService.getPrimary("TELEGRAM_CHAT_ID") : ((typeof ConfigService !== "undefined" && ConfigService.get) ? String(ConfigService.get("TELEGRAM_CHAT_ID") || "").split(",")[0].trim() : ""));
   var sessao = "";
   if (id && typeof criarSessaoCockpit_ === "function") {
@@ -65242,7 +65242,7 @@ function configurarMenuButtonTelegram(chatId) {
 
   var urlCockpit = (typeof obterUrlCockpit === "function")
     ? obterUrlCockpit(chatId)
-    : "https://wagmms.github.io/cockpit/";
+    : "https://wagmmss.github.io/cockpit/";
 
   var payload = {
     menu_button: {

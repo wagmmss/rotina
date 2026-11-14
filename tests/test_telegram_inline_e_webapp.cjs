@@ -178,7 +178,7 @@ async function executarTestesTelegramInlineEWebApp() {
   assert.ok(chamadasPost[0].url.includes('/setChatMenuButton'), 'Deve chamar /setChatMenuButton');
   assert.strictEqual(chamadasPost[0].payload.menu_button.type, 'web_app', 'Menu button deve ser type web_app');
   assert.ok(chamadasPost[0].payload.menu_button.text.includes('Cockpit'), 'Texto do botão deve mencionar Cockpit');
-  assert.ok(chamadasPost[0].payload.menu_button.web_app.url.includes('wagmms.github.io/cockpit'), 'URL deve apontar para o Cockpit');
+  assert.ok(chamadasPost[0].payload.menu_button.web_app.url.includes('wagmmss.github.io/cockpit'), 'URL deve apontar para o Cockpit');
   console.log('  ✓ Configuração de Menu Button para WebApp 100% validada.');
 
   // ─────────────────────────────────────────────────────────────────────────────
