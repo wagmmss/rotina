@@ -22,7 +22,7 @@ function configurarMenuButtonTelegram(chatId) {
 
   var urlCockpit = (typeof obterUrlCockpit === "function")
     ? obterUrlCockpit(chatId)
-    : "https://wagmmss.github.io/cockpit/";
+    : "https://rotina-tt8n.onrender.com/cockpit";
 
   var payload = {
     menu_button: {
