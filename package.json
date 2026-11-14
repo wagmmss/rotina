@@ -9,7 +9,7 @@
     "lint": "node --check server.js && node --check server/index.js && node --check server/runtime.js && node --check server/validators.js && node --check server/telegram-gateway.js && node --check server/gemini-async.js",
     "test": "node scripts/run_tests.cjs",
     "test:affected": "node scripts/run_tests.cjs --affected",
-    "build": "python3 build_master.py",
+    "build": "if command -v python3 >/dev/null 2>&1; then python3 build_master.py; else node scripts/check_syntax.cjs src/*.js; fi",
     "extrair:hsl": "node scripts/extrair_guia_hsl.js",
     "test:all": "node scripts/run_tests.cjs --all",
     "test:prime": "bash scripts/testador_prime.sh --mode all",

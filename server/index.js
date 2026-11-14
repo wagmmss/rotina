@@ -1550,8 +1550,7 @@ async function buildServer() {
       const fakeGasEvent = {
         parameter: {
           secret: secretEsperado,
-          // Com D1 ativo, o update foi gravado apenas no D1 remoto; doPost precisa enfileirar no PersistenciaBot local.
-          ...(d1Inbox ? {} : { preEnqueued: '1' })
+          preEnqueued: '1'
         },
         postData: {
           contents: JSON.stringify(updateData)
