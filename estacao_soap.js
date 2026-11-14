@@ -32,7 +32,8 @@ let debounceTimerSoap = null;
 const SOAP_DRAFT_KEY = 'rotina_soap_draft';
 const IDB_NAME = 'RotinaClinicalDB';
 const IDB_STORE = 'soap_evolutions';
-const IDB_VERSION = 1;
+const IDB_STORE_CONFIG = 'config_medico';
+const IDB_VERSION = 3;
 const MAX_HISTORY_ITEMS = 50;
 
 /**
@@ -213,9 +214,20 @@ function limparFormularioSoap() {
   if (alertContainer) alertContainer.innerHTML = '';
 }
 
+function garantirStoresRotinaClinicalDB(db) {
+  if (!db) return;
+  if (!db.objectStoreNames.contains(IDB_STORE)) {
+    const store = db.createObjectStore(IDB_STORE, { keyPath: 'id', autoIncrement: true });
+    store.createIndex('timestamp', 'timestamp', { unique: false });
+  }
+  if (!db.objectStoreNames.contains(IDB_STORE_CONFIG)) {
+    db.createObjectStore(IDB_STORE_CONFIG, { keyPath: 'id' });
+  }
+}
+
 function initSoapIndexedDB() {
-  return new Promise((resolve, reject) => {
-    if (!window.indexedDB) {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || !window.indexedDB) {
       console.warn('[Estação SOAP] IndexedDB não suportado neste navegador.');
       return resolve(null);
     }
@@ -223,16 +235,21 @@ function initSoapIndexedDB() {
     const request = indexedDB.open(IDB_NAME, IDB_VERSION);
 
     request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains(IDB_STORE)) {
-        const store = db.createObjectStore(IDB_STORE, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('timestamp', 'timestamp', { unique: false });
-      }
+      garantirStoresRotinaClinicalDB(event.target.result);
     };
 
     request.onsuccess = (event) => resolve(event.target.result);
     request.onerror = (event) => {
-      console.error('[Estação SOAP] Erro ao abrir IndexedDB:', event.target.error);
+      const err = event && event.target ? event.target.error : null;
+      if (err && err.name === 'VersionError') {
+        try {
+          const fallbackReq = indexedDB.open(IDB_NAME);
+          fallbackReq.onsuccess = (ev2) => resolve(ev2.target.result);
+          fallbackReq.onerror = () => resolve(null);
+          return;
+        } catch (_) {}
+      }
+      console.error('[Estação SOAP] Erro ao abrir IndexedDB:', err);
       resolve(null);
     };
   });
@@ -339,7 +356,9 @@ function iniciarDitadoVozSoap() {
   const textarea = document.getElementById('soap-brain-dump');
 
   if (!SpeechRecognition) {
-    alert('Seu navegador não suporta ditado por voz nativo (Web Speech API). Recomendamos o uso do Google Chrome ou Microsoft Edge.');
+    if (typeof window.copiarToast === 'function') {
+      window.copiarToast('Ditado nativo indisponível neste navegador. Use Google Chrome ou digite no campo abaixo.');
+    }
     return;
   }
 
@@ -465,8 +484,8 @@ async function enviarParaEstacaoSoap(modelOverride = null) {
         <div class="soap-alert soap-alert-warning" style="padding:12px; border-left:4px solid #f59e0b; background:#fffbeb; color:#92400e; border-radius:6px; margin-bottom:12px;">
           ⚠️ <strong>Atenção:</strong> Insira ou dite pelo menos um resumo clínico (mínimo de 3 caracteres) no campo de anotações livres antes de gerar a evolução.
         </div>`;
-    } else {
-      alert('Insira ou dite o caso clínico (mínimo de 3 caracteres).');
+    } else if (typeof window.copiarToast === 'function') {
+      window.copiarToast('Insira ou dite o caso clínico (mínimo de 3 caracteres).');
     }
     if (textarea) textarea.focus();
     return;
@@ -499,8 +518,8 @@ async function enviarParaEstacaoSoap(modelOverride = null) {
         <div class="soap-alert soap-alert-danger" style="padding:12px; border-left:4px solid #ef4444; background:#fef2f2; color:#991b1b; border-radius:6px; margin-bottom:12px;">
           🚨 <strong>Valores Fisiológicos Inválidos:</strong> ${escapeHtmlSoap(msg)}
         </div>`;
-    } else {
-      alert(msg);
+    } else if (typeof window.copiarToast === 'function') {
+      window.copiarToast(msg);
     }
     const primeiroInvalido = document.getElementById(invalidos[0].id);
     if (primeiroInvalido) primeiroInvalido.focus();
@@ -593,7 +612,8 @@ function extrairTextoSubjetivo(s) {
   const partes = [];
   if (s.qp) partes.push(`QP: ${s.qp}`);
   if (s.hda) partes.push(`HDA: ${s.hda}`);
-  if (s.hpp) partes.push(`HPP: ${s.hpp}`);
+  if (s.hpp_medicacoes || s.hpp) partes.push(`HPP / Medicações: ${s.hpp_medicacoes || s.hpp}`);
+  if (s.alergias) partes.push(`Alergias: ${s.alergias}`);
   if (s.medicamentos_em_uso) partes.push(`Medicamentos em uso: ${s.medicamentos_em_uso}`);
   if (s.revisao_sistemas) partes.push(`Revisão de Sistemas: ${s.revisao_sistemas}`);
   return partes.length > 0 ? partes.join('\n\n') : JSON.stringify(s, null, 2);
@@ -604,9 +624,10 @@ function extrairTextoObjetivo(o) {
   if (typeof o === 'string') return o;
   if (o.texto_unificado) return o.texto_unificado;
   const partes = [];
+  if (o.sinais_vitais_formatados || o.sinais_vitais_texto) partes.push(`Sinais Vitais: ${o.sinais_vitais_formatados || o.sinais_vitais_texto}`);
+  if (o.escores_calculados) partes.push(`Escores Clínicos: ${o.escores_calculados}`);
   if (o.ectoscopia) partes.push(`Ectoscopia: ${o.ectoscopia}`);
-  if (o.sinais_vitais_texto) partes.push(`Sinais Vitais: ${o.sinais_vitais_texto}`);
-  if (o.exame_fisico_direcionado) partes.push(`Exame Físico: ${o.exame_fisico_direcionado}`);
+  if (o.exame_fisico_sistemas || o.exame_fisico_direcionado) partes.push(`Exame Físico: ${o.exame_fisico_sistemas || o.exame_fisico_direcionado}`);
   if (o.exames_complementares_citados) partes.push(`Exames Complementares: ${o.exames_complementares_citados}`);
   return partes.length > 0 ? partes.join('\n\n') : JSON.stringify(o, null, 2);
 }
@@ -620,7 +641,8 @@ function extrairTextoAvaliacao(a) {
       const cid = h.cid10 ? `[${h.cid10}] ` : '';
       const prob = h.probabilidade ? ` (${h.probabilidade})` : '';
       const just = h.justificativa ? ` - ${h.justificativa}` : '';
-      return `• ${cid}${h.diagnostico || 'Hipótese'}${prob}${just}`;
+      const desc = h.descricao || h.diagnostico || 'Hipótese';
+      return `• ${cid}${desc}${prob}${just}`;
     });
     partes.push(`HIPÓTESES DIAGNÓSTICAS:\n${hdLines.join('\n')}`);
   }
@@ -640,10 +662,10 @@ function extrairTextoPlano(p) {
     const rxLines = p.prescricao.map((item, idx) => {
       if (typeof item === 'string') return `${idx + 1}. ${item}`;
       const nome = item.item || item.medicamento || item.nome || 'Item';
-      const dose = item.dose ? ` ${item.dose}` : '';
+      const dose = item.concentracao || item.dose ? ` ${item.concentracao || item.dose}` : '';
       const via = item.via ? ` (${item.via})` : '';
       const pos = item.posologia || item.instrucoes || '';
-      const dur = item.duracao ? ` por ${item.duracao}` : '';
+      const dur = item.duracao && !pos.toLowerCase().includes(String(item.duracao).toLowerCase()) ? ` (${item.duracao})` : '';
       return `${idx + 1}. ${nome}${dose}${via}\n   ${pos}${dur}`.trim();
     });
     partes.push(`PRESCRIÇÃO:\n${rxLines.join('\n\n')}`);
@@ -651,8 +673,14 @@ function extrairTextoPlano(p) {
   if (Array.isArray(p.exames_solicitados) && p.exames_solicitados.length > 0) {
     partes.push(`EXAMES SOLICITADOS:\n${p.exames_solicitados.map(e => `• ${e}`).join('\n')}`);
   }
-  if (p.orientacoes_e_sinais_alarme) partes.push(`ORIENTAÇÕES E SINAIS DE ALARME:\n${p.orientacoes_e_sinais_alarme}`);
-  if (p.criterios_reavaliacao) partes.push(`CRITÉRIOS DE REAVALIAÇÃO:\n${p.criterios_reavaliacao}`);
+  if (Array.isArray(p.orientacoes_paciente) && p.orientacoes_paciente.length > 0) {
+    partes.push(`ORIENTAÇÕES AO PACIENTE:\n${p.orientacoes_paciente.map(o => `• ${o}`).join('\n')}`);
+  } else if (p.orientacoes_e_sinais_alarme) {
+    partes.push(`ORIENTAÇÕES E SINAIS DE ALARME:\n${p.orientacoes_e_sinais_alarme}`);
+  }
+  if (p.criterios_retorno_encaminhamento || p.criterios_reavaliacao) {
+    partes.push(`CRITÉRIOS DE RETORNO E REAVALIAÇÃO:\n${p.criterios_retorno_encaminhamento || p.criterios_reavaliacao}`);
+  }
   return partes.length > 0 ? partes.join('\n\n') : JSON.stringify(p, null, 2);
 }
 
@@ -660,11 +688,11 @@ function renderizarResultadoSoap(result, dadosInput) {
   const alertContainer = document.getElementById('soap-alertas-container');
   const resContainer = document.getElementById('soap-resultado-container');
 
-  // Normaliza campos da resposta da API
+  // Normaliza campos da resposta da API (/api/clinical/soap)
   const data = result.data || result;
-  const soapObj = data.soap || {};
-  const subjRaw = soapObj.subjetivo_formatado || soapObj.subjetivo || data.subjetivo || data.S || '';
-  const objRaw = soapObj.objetivo_formatado || soapObj.objetivo || data.objetivo || data.O || '';
+  const soapObj = data.soap || data || {};
+  const subjRaw = soapObj.subjetivo_formatado || soapObj.subjetivo || data.subjetivo_formatado || data.subjetivo || data.S || '';
+  const objRaw = soapObj.objetivo_formatado || soapObj.objetivo || data.objetivo_formatado || data.objetivo || data.O || '';
   const avalRaw = soapObj.avaliacao || data.avaliacao || data.A || '';
   const planoRaw = soapObj.plano || data.plano || data.P || '';
 
@@ -673,17 +701,19 @@ function renderizarResultadoSoap(result, dadosInput) {
   const textoAvaliacao = extrairTextoAvaliacao(avalRaw);
   const textoPlano = extrairTextoPlano(planoRaw);
 
-  const safetyAlerts = data.safety_analysis?.alerts || [];
+  const safetyAlerts = Array.isArray(result.clinical_alerts)
+    ? result.clinical_alerts
+    : (data.safety_analysis?.alerts || []);
   const redFlags = data.red_flags || (avalRaw && avalRaw.red_flags) || data.alertas || [];
   const alergiasAlert = data.alergias_alerta || (dadosInput?.alergias ? [`Alergia relatada: ${dadosInput.alergias}`] : []);
   const prescricaoRaw = (planoRaw && planoRaw.prescricao) || data.prescricao || data.prescricao_sugerida || '';
-  const referencias = soapObj.referencias_bibliograficas || data.referencias || data.diretrizes || [];
+  const referencias = soapObj.referencias_bibliograficas || data.referencias_bibliograficas || data.referencias || data.diretrizes || [];
 
   // 1. Renderizar Alertas (Safety Alerts + Red Flags + Alergias)
   if (alertContainer) {
     let alertsHtml = '';
 
-    if (data.has_critical_alerts || safetyAlerts.some(a => a.severity === 'CRITICAL')) {
+    if (result.is_safe === false || data.has_critical_alerts || safetyAlerts.some(a => a.severity === 'CRITICAL')) {
       alertsHtml += `
         <div class="soap-alert-critico" style="padding:14px 16px; margin-bottom:12px; border-left:5px solid #b91c1c; background:#fef2f2; color:#991b1b; border-radius:6px; font-weight:600;">
           🚨 ATENÇÃO BEIRA-LEITO: Risco ou contraindicação médica crítica detectada na conduta!
@@ -698,7 +728,7 @@ function renderizarResultadoSoap(result, dadosInput) {
         const corTexto = isCrit ? '#991b1b' : '#9a3412';
         return `
           <div class="soap-alert-item" style="padding:12px 16px; margin-bottom:10px; border-left:4px solid ${corBorda}; background:${corBg}; color:${corTexto}; border-radius:6px;">
-            <strong>${escapeHtmlSoap(a.title || 'Alerta de Segurança')}:</strong> ${escapeHtmlSoap(a.description || '')}
+            <strong>${escapeHtmlSoap(a.title || a.code || 'Alerta de Segurança')}:</strong> ${escapeHtmlSoap(a.message || a.description || '')}
           </div>`;
       }).join('');
     }
@@ -729,7 +759,7 @@ function renderizarResultadoSoap(result, dadosInput) {
   }
 
   // 2. Montar texto limpo para cópia do SOAP e da Prescrição
-  const textoSoapLimpo = data.clipboard?.prontuario_soap || [
+  const textoSoapLimpo = result.clipboard?.soap_text || data.clipboard?.prontuario_soap || [
     `# EVOLUÇÃO CLÍNICA (SOAP)`,
     `[S - SUBJETIVO]\n${textoSubjetivo}`,
     `[O - OBJETIVO]\n${textoObjetivo}`,
@@ -737,13 +767,13 @@ function renderizarResultadoSoap(result, dadosInput) {
     `[P - PLANO]\n${textoPlano}`
   ].join('\n\n');
 
-  let textoPrescricaoLimpo = data.clipboard?.receituario || '';
+  let textoPrescricaoLimpo = result.clipboard?.prescription_text || data.clipboard?.receituario || '';
   if (!textoPrescricaoLimpo) {
     if (Array.isArray(prescricaoRaw)) {
       textoPrescricaoLimpo = prescricaoRaw.map((item, idx) => {
         if (typeof item === 'string') return `${idx + 1}. ${item}`;
         const nome = item.item || item.medicamento || item.nome || 'Item';
-        const dose = item.dose ? ` ${item.dose}` : '';
+        const dose = item.concentracao || item.dose ? ` ${item.concentracao || item.dose}` : '';
         const posologia = item.posologia || item.instrucoes || item.como_usar || '';
         const via = item.via ? `(${item.via})` : '';
         return `${idx + 1}. ${nome}${dose} ${via}\n   ${posologia}`.trim();
@@ -757,20 +787,44 @@ function renderizarResultadoSoap(result, dadosInput) {
   window.__lastSoapTextToCopy = textoSoapLimpo;
   window.__lastPrescricaoTextToCopy = textoPrescricaoLimpo;
 
-  // 3. Renderizar Blocos S + O + A + P, Prescrição, Referências e Botão Gemini 4 Argon
+  const metaInfo = result._meta || {};
+  const isOfflineDet = Boolean(metaInfo.is_offline_contingency || metaInfo.model_used === 'motor-clinico-deterministico-local');
+  const engineLabel = isOfflineDet
+    ? 'Protocolo Determinístico Local (Contingência Offline)'
+    : `IA Clínica (${metaInfo.model_used || 'Gemini'}) + SafetyGuard`;
+  const ragLabel = metaInfo.tdc_source === 'sqlite_fts5'
+    ? `TdC RAG FTS5 (${metaInfo.tdc_rag_matches || 0} evidências)`
+    : (metaInfo.tdc_source === 'resumo_emergencia_local'
+      ? `TdC Resumo Local (${metaInfo.tdc_rag_matches || 0} guias)`
+      : (metaInfo.tdc_db_available ? 'TdC FTS5 ativo' : 'Sem correspondência TdC'));
+  const execMsLabel = typeof metaInfo.execution_time_ms === 'number'
+    ? ` · ${metaInfo.execution_time_ms}ms`
+    : '';
+
+  // 3. Renderizar Blocos S + O + A + P, Prescrição, Referências e Botão de Aprofundamento
   if (resContainer) {
     const refBadgesHtml = Array.isArray(referencias) && referencias.length > 0
       ? `<div class="soap-referencias-box" style="margin-top:16px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
           <span style="font-size:12px; font-weight:600; opacity:0.75;">📚 Diretrizes e Referências:</span>
-          ${referencias.map(ref => `<span class="soap-ref-badge" style="font-size:11px; padding:3px 8px; background:rgba(59,130,246,0.12); color:#1d4ed8; border-radius:999px; font-weight:500;">${escapeHtmlSoap(typeof ref === 'object' ? (ref.titulo || ref.fonte || JSON.stringify(ref)) : String(ref))}</span>`).join('')}
+          ${referencias.map(ref => {
+            const label = typeof ref === 'object'
+              ? ([ref.orgao, ref.diretriz || ref.titulo || ref.fonte, ref.ano].filter(Boolean).join(' • ') || JSON.stringify(ref))
+              : String(ref);
+            return `<span class="soap-ref-badge" style="font-size:11px; padding:3px 8px; background:rgba(59,130,246,0.12); color:#93c5fd; border:1px solid rgba(59,130,246,0.3); border-radius:6px; font-weight:500;">${escapeHtmlSoap(label)}</span>`;
+          }).join('')}
          </div>`
       : '';
 
     resContainer.innerHTML = `
       <div class="soap-result-card" style="border:1px solid rgba(148,163,184,0.3); border-radius:8px; padding:16px; margin-bottom:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-          <h4 style="margin:0; font-size:16px;">📄 Evolução Estruturada (SOAP)</h4>
-          <button type="button" class="btn-soap-copy" onclick="copiarTextoParaClipboard(window.__lastSoapTextToCopy, this, '✅ Copiado!')" style="padding:6px 12px; cursor:pointer; font-weight:600; border-radius:6px;">
+          <div>
+            <h4 style="margin:0; font-size:16px;">📄 Evolução Estruturada (SOAP)</h4>
+            <div style="font-size:11px; color:${isOfflineDet ? '#fcd34d' : '#94a3b8'}; font-variant-numeric:tabular-nums; margin-top:2px;">
+              ${escapeHtmlSoap(engineLabel)} · ${escapeHtmlSoap(ragLabel)}${escapeHtmlSoap(execMsLabel)}
+            </div>
+          </div>
+          <button type="button" class="btn-soap-copy" onclick="copiarTextoParaClipboard(window.__lastSoapTextToCopy, this, '✅ Copiado!')" style="padding:8px 14px; min-height:44px; cursor:pointer; font-weight:600; border-radius:8px;">
             📋 Copiar Evolução SOAP
           </button>
         </div>
@@ -915,15 +969,19 @@ function extrairDadosParaReceituario() {
   const dataAtual = new Date().toLocaleDateString('pt-BR');
 
   let itensPrescricao = [];
-  if (lastSoapResult && lastSoapResult.plano && Array.isArray(lastSoapResult.plano.prescricao)) {
-    itensPrescricao = lastSoapResult.plano.prescricao;
+  const planoObj = (lastSoapResult && lastSoapResult.data && lastSoapResult.data.plano)
+    ? lastSoapResult.data.plano
+    : (lastSoapResult && lastSoapResult.plano ? lastSoapResult.plano : null);
+
+  if (planoObj && Array.isArray(planoObj.prescricao)) {
+    itensPrescricao = planoObj.prescricao;
   } else if (window.__lastPrescricaoTextToCopy) {
     const linhas = window.__lastPrescricaoTextToCopy.split('\n').filter(Boolean);
     itensPrescricao = linhas.map(l => ({ medicamento: l, posologia: '', via: 'USO ORAL' }));
   }
 
-  const orientacoes = (lastSoapResult && lastSoapResult.plano && Array.isArray(lastSoapResult.plano.orientacoes_paciente))
-    ? lastSoapResult.plano.orientacoes_paciente.join('\n')
+  const orientacoes = (planoObj && Array.isArray(planoObj.orientacoes_paciente))
+    ? planoObj.orientacoes_paciente.join('\n')
     : '1. Manter hidratação adequada.\n2. Retornar imediatamente em caso de sinais de alarme (febre persistente, dispneia, piora clínica importante).';
 
   // Obtenção dinâmica do cabeçalho institucional via CNES ou Consultório Personalizado
@@ -1148,54 +1206,44 @@ function exportarPrescricaoPdfEditavel() {
   const dados = extrairDadosParaReceituario();
   const htmlReceituario = construirHtmlReceituarioMedico(dados, true);
 
-  const janelaPdf = window.open('', '_blank', 'width=900,height=850');
-  if (!janelaPdf) {
-    alert('Permita pop-ups no navegador para abrir o editor do Receituário Médico.');
-    return;
+  let overlay = document.getElementById('soap-receituario-inline-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'soap-receituario-inline-overlay';
+    overlay.style.cssText = 'position:fixed; inset:0; z-index:999999; background:rgba(2,6,23,0.92); display:flex; flex-direction:column;';
+    document.body.appendChild(overlay);
   }
 
-  const barraControle = `
-    <div id="no-print-toolbar" style="background:#0f172a; color:#f8fafc; padding:12px 20px; font-family:sans-serif; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:9999; box-shadow:0 2px 10px rgba(0,0,0,0.3);">
+  overlay.innerHTML = `
+    <div style="background:#0f172a; color:#f8fafc; padding:12px 20px; font-family:system-ui,sans-serif; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; flex-wrap:wrap; gap:10px;">
       <div>
         <strong style="font-size:14px;">📝 Receituário Médico Editável</strong>
-        <span style="font-size:12px; color:#94a3b8; margin-left:10px;">Clique em qualquer texto para editar antes de imprimir ou salvar como PDF.</span>
+        <span style="font-size:12px; color:#94a3b8; margin-left:10px;">Clique em qualquer texto abaixo para editar antes de imprimir ou baixar.</span>
       </div>
-      <div style="display:flex; gap:10px;">
-        <button onclick="window.print()" style="background:#10b981; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:bold; cursor:pointer;">
+      <div style="display:flex; gap:8px;">
+        <button type="button" onclick="exportarPrescricaoDocx()" style="background:#1e40af; color:#fff; border:1px solid #3b82f6; padding:7px 14px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;">
+          📄 Baixar .docx
+        </button>
+        <button type="button" onclick="const ifr = document.getElementById('soap-receituario-iframe'); if (ifr && ifr.contentWindow) ifr.contentWindow.print();" style="background:#10b981; color:#022c22; border:none; padding:7px 14px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;">
           🖨️ Imprimir / Salvar PDF
         </button>
-        <button onclick="window.close()" style="background:#475569; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer;">
-          Fechar
+        <button type="button" onclick="const ov = document.getElementById('soap-receituario-inline-overlay'); if (ov) ov.remove();" style="background:#334155; color:#fff; border:none; padding:7px 12px; border-radius:6px; cursor:pointer; font-size:12px;">
+          ✕ Fechar
         </button>
       </div>
     </div>
-    <style>
-      @media print {
-        #no-print-toolbar { display: none !important; }
-        body { background: #fff !important; padding: 0 !important; }
-        .receituario-container { box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; }
-      }
-      @media screen {
-        body { background: #e2e8f0; padding-bottom: 40px; }
-        .receituario-container {
-          background: #ffffff;
-          padding: 2cm;
-          margin: 24px auto;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-          border-radius: 4px;
-          outline: none;
-        }
-        .receituario-container:focus {
-          box-shadow: 0 0 0 2px #3b82f6, 0 4px 20px rgba(0,0,0,0.15);
-        }
-      }
-    </style>
+    <iframe id="soap-receituario-iframe" style="flex:1; width:100%; border:none; background:#e2e8f0;"></iframe>
   `;
 
-  const htmlFinal = htmlReceituario.replace('<body>', `<body>${barraControle}`);
-  janelaPdf.document.open();
-  janelaPdf.document.write(htmlFinal);
-  janelaPdf.document.close();
+  const iframe = document.getElementById('soap-receituario-iframe');
+  if (iframe) {
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(htmlReceituario);
+      doc.close();
+    }
+  }
 }
 
 // --- UTILITÁRIOS INTERNOS ---
@@ -1319,21 +1367,15 @@ const CnesWorkplaceManager = {
   sincronizarIndexedDB() {
     if (typeof indexedDB === 'undefined') return;
     try {
-      const req = indexedDB.open('RotinaClinicalDB', 2);
-      req.onupgradeneeded = (ev) => {
-        const db = ev.target.result;
-        if (!db.objectStoreNames.contains('config_medico')) {
-          db.createObjectStore('config_medico', { keyPath: 'id' });
-        }
-      };
-      req.onsuccess = (ev) => {
-        const db = ev.target.result;
-        if (!db.objectStoreNames.contains('config_medico')) return;
-        const tx = db.transaction('config_medico', 'readwrite');
-        const store = tx.objectStore('config_medico');
-        store.put({ id: 'local_trabalho_ativo', valor: this.localAtivo, updatedAt: Date.now() });
-        store.put({ id: 'locais_favoritos', valor: this.favoritos, updatedAt: Date.now() });
-      };
+      initSoapIndexedDB().then((db) => {
+        if (!db || !db.objectStoreNames.contains(IDB_STORE_CONFIG)) return;
+        try {
+          const tx = db.transaction(IDB_STORE_CONFIG, 'readwrite');
+          const store = tx.objectStore(IDB_STORE_CONFIG);
+          store.put({ id: 'local_trabalho_ativo', valor: this.localAtivo, updatedAt: Date.now() });
+          store.put({ id: 'locais_favoritos', valor: this.favoritos, updatedAt: Date.now() });
+        } catch (_) {}
+      });
     } catch (_) {}
   },
 
@@ -1645,7 +1687,9 @@ const CnesWorkplaceManager = {
   async salvarPersonalizado() {
     const nome = document.getElementById('custom-cnes-nome')?.value?.trim();
     if (!nome) {
-      alert('Informe o Nome do Consultório ou Unidade.');
+      if (typeof window.copiarToast === 'function') {
+        window.copiarToast('Informe o Nome do Consultório ou Unidade.');
+      }
       return;
     }
 

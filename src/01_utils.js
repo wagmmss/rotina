@@ -647,6 +647,11 @@ function obterNomeTratamentoUsuario(chatId) {
   return (typeof ConfigService !== "undefined" && ConfigService.get) ? ConfigService.get("TELEGRAM_GUEST_NAME", "Doutor(a)") : "Doutor(a)";
 }
 
+function ehModuloAtivo(id, modulosAtivos) {
+  if (!Array.isArray(modulosAtivos) || modulosAtivos.length === 0) return true;
+  return modulosAtivos.indexOf(id) !== -1;
+}
+
 /**
  * Retorna a estrutura do teclado fixo principal (ReplyKeyboardMarkup)
  * Projetado para navegação rápida de 1 toque no celular em ambiente hospitalar e rotina,
@@ -660,18 +665,14 @@ function obterTecladoFixoPrincipal(chatId) {
       modulosAtivos = ctx.modulos_ativos;
     }
   }
-  function modAtivo(id) {
-    if (!modulosAtivos) return true;
-    return modulosAtivos.indexOf(id) !== -1;
-  }
 
   var candidatos = [];
-  if (modAtivo("SALA_VERMELHA") || modAtivo("INTOXICACOES")) candidatos.push({ text: '🚨 Sala Vermelha' });
-  if (modAtivo("ENFERMARIA_LEITOS")) candidatos.push({ text: '🛏️ Enfermaria' });
-  if (modAtivo("SOAP_PEP") || modAtivo("RECEITUARIO_ATESTADOS")) candidatos.push({ text: '🩺 Ambulatório' });
-  if (modAtivo("FARMACIA_REMUME") || modAtivo("PRECEPTOR_EBM")) candidatos.push({ text: '💊 Consultas de Bolso' });
-  if (modAtivo("PEDIATRIA_DOSES")) candidatos.push({ text: '👶 Pediatria' });
-  if (modAtivo("GO_OBSTETRICIA")) candidatos.push({ text: '🤰 G&O / Maternidade' });
+  if (ehModuloAtivo("SALA_VERMELHA", modulosAtivos) || ehModuloAtivo("INTOXICACOES", modulosAtivos)) candidatos.push({ text: '🚨 Sala Vermelha' });
+  if (ehModuloAtivo("ENFERMARIA_LEITOS", modulosAtivos)) candidatos.push({ text: '🛏️ Enfermaria' });
+  if (ehModuloAtivo("SOAP_PEP", modulosAtivos) || ehModuloAtivo("RECEITUARIO_ATESTADOS", modulosAtivos)) candidatos.push({ text: '🩺 Ambulatório' });
+  if (ehModuloAtivo("FARMACIA_REMUME", modulosAtivos) || ehModuloAtivo("PRECEPTOR_EBM", modulosAtivos)) candidatos.push({ text: '💊 Consultas de Bolso' });
+  if (ehModuloAtivo("PEDIATRIA_DOSES", modulosAtivos)) candidatos.push({ text: '👶 Pediatria' });
+  if (ehModuloAtivo("GO_OBSTETRICIA", modulosAtivos)) candidatos.push({ text: '🤰 G&O / Maternidade' });
 
   if (candidatos.length === 0) {
     candidatos = [

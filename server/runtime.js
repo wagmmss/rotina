@@ -174,6 +174,12 @@ if (!propsStore.SPREADSHEET_ID_REMUME) {
 if (!propsStore.SPREADSHEET_ID_INTERACOES) {
   propsStore.SPREADSHEET_ID_INTERACOES = 'mock_interacoes_sheet_id';
 }
+if (!propsStore.TELEGRAM_CHAT_ID) {
+  propsStore.TELEGRAM_CHAT_ID = '1771571035';
+}
+if (!propsStore.TELEGRAM_BOT_TOKEN) {
+  propsStore.TELEGRAM_BOT_TOKEN = '123456789:local-cockpit-session-key';
+}
 
 let persistTimer = null;
 let asyncPersistQueue = Promise.resolve();

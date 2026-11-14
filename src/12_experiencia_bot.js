@@ -1958,10 +1958,9 @@ function enviarHubPrincipal(chat, messageId) {
     ? ConfigService.getContextoClinico(chat)
     : null;
   var modulos = (ctx && Array.isArray(ctx.modulos_ativos) && ctx.modulos_ativos.length > 0) ? ctx.modulos_ativos : null;
-  function modAtivo(id) {
-    if (!modulos) return true;
-    return modulos.indexOf(id) !== -1;
-  }
+  var _mod = (typeof ehModuloAtivo === 'function')
+    ? function(id) { return ehModuloAtivo(id, modulos); }
+    : function(id) { return !modulos || modulos.indexOf(id) !== -1; };
 
   var nomeSaudacao = (typeof obterNomeTratamentoUsuario === 'function') ? obterNomeTratamentoUsuario(chat) : 'Doutor(a)';
   var temMunicipio = ctx && ctx.municipio && !/^(brasil|rename|nacional)/i.test(String(ctx.municipio).trim());
@@ -1972,14 +1971,14 @@ function enviarHubPrincipal(chat, messageId) {
 
   var urlApp = obterUrlCockpit(chat);
   var pares = [];
-  if (modAtivo('SALA_VERMELHA') || modAtivo('INTOXICACOES')) pares.push(['🚨 Sala Vermelha', 'ux:hub:sala']);
-  if (modAtivo('ENFERMARIA_LEITOS')) pares.push(['🛏️ Enfermaria', 'ux:hub:enf']);
-  if (modAtivo('SOAP_PEP') || modAtivo('RECEITUARIO_ATESTADOS')) pares.push(['🩺 Ambulatório', 'ux:hub:amb']);
-  if (modAtivo('GO_OBSTETRICIA')) pares.push(['🤰 Hub G&O', 'ux:rotina:go']);
-  if (modAtivo('FARMACIA_REMUME') || modAtivo('PRECEPTOR_EBM')) pares.push(['💊 Consultas Bolso', 'ux:hub:bolso']);
+  if (_mod('SALA_VERMELHA') || _mod('INTOXICACOES')) pares.push(['🚨 Sala Vermelha', 'ux:hub:sala']);
+  if (_mod('ENFERMARIA_LEITOS')) pares.push(['🛏️ Enfermaria', 'ux:hub:enf']);
+  if (_mod('SOAP_PEP') || _mod('RECEITUARIO_ATESTADOS')) pares.push(['🩺 Ambulatório', 'ux:hub:amb']);
+  if (_mod('GO_OBSTETRICIA')) pares.push(['🤰 Hub G&O', 'ux:rotina:go']);
+  if (_mod('FARMACIA_REMUME') || _mod('PRECEPTOR_EBM')) pares.push(['💊 Consultas Bolso', 'ux:hub:bolso']);
   if (typeof ehUsuarioTitular === 'function' && ehUsuarioTitular(chat)) {
     pares.push(['📅 Rotina & Estudo', 'ux:hub:rotina']);
-  } else if (modAtivo('CALCULADORAS_ESCORES')) {
+  } else if (_mod('CALCULADORAS_ESCORES')) {
     pares.push(['🩸 Gasometria', 'ux:iniciar:gaso']);
   }
 

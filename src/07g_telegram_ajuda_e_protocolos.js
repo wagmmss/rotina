@@ -279,6 +279,7 @@ function enviarMenuAjudaInterativo(chatId, messageId) {
     "Envie suas dúvidas clínicas ou casos reais do jeito que preferir — por mensagem escrita ou áudio gravado no hospital (ex: _\"paciente com dor torácica típica\"_, _\"ajuste de vancomicina clearance 30\"_).\n\n" +
     "3️⃣ *Calculadoras & Protocolos Diretos:*\n" +
     "Comandos rápidos com barra para obter doses exatas e escores na hora (ex: `/dva`, `/gaso`, `/sri`, `/curb65`).\n\n" +
+    "📱 *Telegram vs. Cockpit PWA:* Use o Telegram no corredor para cálculos e áudio em 3s; abra o Cockpit PWA para Estação SOAP unificada, passagem de leitos e modo 100% offline.\n\n" +
     "💡 Toque abaixo para explorar o guia passo a passo ou ver exemplos práticos:";
 
   var botoes = (typeof botoesBot === "function") ? botoesBot([

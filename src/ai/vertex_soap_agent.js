@@ -50,6 +50,20 @@ function loadCredentials() {
   );
 }
 
+function tryLoadCredentials() {
+  try {
+    return loadCredentials();
+  } catch (_) {
+    return null;
+  }
+}
+
+function getConfiguredGeminiApiKey() {
+  const raw = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS || '';
+  if (!raw || typeof raw !== 'string') return '';
+  return raw.split(',')[0].trim();
+}
+
 /**
  * Codifica buffer ou string para Base64URL.
  */
@@ -266,6 +280,392 @@ async function callVertexModel({ model, systemPrompt, userPrompt, accessToken, p
 }
 
 /**
+ * Executa a chamada à API Gemini via API Key quando credenciais de Service Account Vertex não estão presentes.
+ */
+async function callGeminiApiKeyModel({ apiKey, model = 'gemini-2.5-flash', systemPrompt, userPrompt }) {
+  const targetModel = (model && !model.includes('argon') && !model.includes('hydrogen'))
+    ? model
+    : 'gemini-2.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const requestPayload = {
+    systemInstruction: {
+      parts: [{ text: systemPrompt }]
+    },
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: userPrompt }]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: 'application/json',
+      responseSchema: VertexSoapOutputSchema
+    }
+  };
+
+  const bodyString = JSON.stringify(requestPayload);
+  const response = await httpsRequest(
+    url,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(bodyString)
+      }
+    },
+    bodyString
+  );
+
+  const parsedResponse = JSON.parse(response.body);
+  const candidateText = parsedResponse?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!candidateText) {
+    throw new Error(`Resposta da Gemini API (${targetModel}) não contém texto válido no candidato.`);
+  }
+  return JSON.parse(candidateText);
+}
+
+/**
+ * Motor Clínico Determinístico de Contingência Local (RAM + RAG TdC).
+ * Garante estruturação SOAP imediata e segura mesmo sem credenciais externas de nuvem.
+ */
+function buildDeterministicClinicalSoap({
+  brain_dump = '',
+  patient_context = {},
+  vitals = {},
+  calculated_metrics = {},
+  tdc_evidences = []
+}) {
+  const textoBruto = String(brain_dump || '').trim();
+  const lower = textoBruto.toLowerCase();
+
+  // 1. Tradução semiológica técnica do relato
+  let hdaTecnica = textoBruto
+    .replace(/\bdor no peito\b/gi, 'dor torácica')
+    .replace(/\bfalta de ar ao deitar\b/gi, 'ortopneia')
+    .replace(/\bfalta de ar\b/gi, 'dispneia')
+    .replace(/\bbatedeira no peito\b|\bbatedeira\b/gi, 'palpitações')
+    .replace(/\bdor de cabe[çc]a\b/gi, 'cefaleia')
+    .replace(/\bard[êe]ncia para urinar\b|\bdor para urinar\b/gi, 'disúria')
+    .replace(/\bv[ôo]mitos?\b/gi, 'êmese')
+    .replace(/\bdor na barriga\b/gi, 'dor abdominal');
+
+  const demografiaParts = [];
+  if (patient_context.idade !== undefined && patient_context.idade !== null) {
+    demografiaParts.push(`${patient_context.idade} anos`);
+  }
+  if (patient_context.sexo === 'M') demografiaParts.push('sexo masculino');
+  else if (patient_context.sexo === 'F') demografiaParts.push('sexo feminino');
+  if (patient_context.gestante) demografiaParts.push('gestante');
+
+  const prefixoDemografico = demografiaParts.length > 0
+    ? `Paciente (${demografiaParts.join(', ')}): `
+    : '';
+
+  // Queixa Principal concisa
+  const primeiraSentenca = hdaTecnica.split(/[.\n;]/)[0].trim();
+  const qp = primeiraSentenca.length > 90 ? `${primeiraSentenca.slice(0, 87)}...` : (primeiraSentenca || 'Avaliação clínica aguda');
+
+  // HPP e medicações
+  const matchHpp = textoBruto.match(/\b(hipertens[oa]|has|diab[ée]tic[oa]|dm2?|asm[áa]tic[oa]|dpoc| tabagista|etilista|hipotireoidismo|irc|drc|ic|insufici[êe]ncia card[íi]aca|em uso de [^.]+)\b/gi);
+  const hppMedicacoes = matchHpp && matchHpp.length > 0
+    ? `Comorbidades/antecedentes mencionados no relato: ${Array.from(new Set(matchHpp)).join(', ')}.`
+    : 'Não informada no relato inicial (confirmar ativamente comorbidades prévias e medicações de uso contínuo).';
+
+  // Alergias (nunca fabrica "Nega alergias" se não informado)
+  const alergiasContext = Array.isArray(patient_context.alergias) ? patient_context.alergias.filter(Boolean) : [];
+  let alergiasStr = 'Não informado (confirmar ativamente alergias medicamentosas antes de prescrever).';
+  if (alergiasContext.length > 0) {
+    alergiasStr = `Alergia(s) registrada(s): ${alergiasContext.join(', ')}.`;
+  } else if (/alergi[ca]/i.test(textoBruto)) {
+    const mAlerg = textoBruto.match(/[^.;\n]*alergi[^.;\n]*/i);
+    if (mAlerg) alergiasStr = mAlerg[0].trim();
+  }
+
+  const textoSubjetivoUnificado = [
+    `QP: ${qp}.`,
+    `HDA: ${prefixoDemografico}${hdaTecnica}`,
+    `HPP / Medicações: ${hppMedicacoes}`,
+    `Alergias: ${alergiasStr}`
+  ].join('\n');
+
+  // 2. Bloco Objetivo (Sinais Vitais + Métricas Determinísticas + Exame Físico fiel ao relato)
+  const svParts = [];
+  if (vitals.pas !== undefined && vitals.pad !== undefined) {
+    svParts.push(`PA: ${vitals.pas}x${vitals.pad} mmHg`);
+  } else if (vitals.pas !== undefined) {
+    svParts.push(`PAS: ${vitals.pas} mmHg`);
+  }
+  if (vitals.fc !== undefined) svParts.push(`FC: ${vitals.fc} bpm`);
+  if (vitals.fr !== undefined) svParts.push(`FR: ${vitals.fr} irpm`);
+  if (vitals.spo2 !== undefined) svParts.push(`SpO2: ${vitals.spo2}%`);
+  if (vitals.tax !== undefined) svParts.push(`Tax: ${vitals.tax} °C`);
+  if (vitals.hgt !== undefined) svParts.push(`HGT: ${vitals.hgt} mg/dL`);
+  if (vitals.glasgow !== undefined) svParts.push(`Glasgow: ${vitals.glasgow}/15`);
+  if (vitals.peso !== undefined) svParts.push(`Peso: ${vitals.peso} kg`);
+  if (vitals.altura !== undefined) svParts.push(`Altura: ${vitals.altura} cm`);
+
+  const sinaisVitaisFormatados = svParts.length > 0
+    ? svParts.join(' | ')
+    : 'Sinais vitais formais não preenchidos nos campos numéricos (aferir PA, FC, FR, SpO2 e Tax à beira-leito).';
+
+  const escoresParts = [];
+  if (calculated_metrics.pam !== undefined && calculated_metrics.pam !== null) {
+    escoresParts.push(`PAM: ${calculated_metrics.pam} mmHg`);
+  }
+  if (calculated_metrics.indice_choque !== undefined && calculated_metrics.indice_choque !== null) {
+    escoresParts.push(`Índice de Choque (FC/PAS): ${calculated_metrics.indice_choque}`);
+  }
+  if (calculated_metrics.qsofa !== undefined && calculated_metrics.qsofa !== null) {
+    escoresParts.push(`qSOFA: ${calculated_metrics.qsofa}/3`);
+  }
+  if (calculated_metrics.imc !== undefined && calculated_metrics.imc !== null) {
+    escoresParts.push(`IMC: ${calculated_metrics.imc} kg/m² (${calculated_metrics.imc_classificacao || 'Calculado'})`);
+  }
+  const escoresCalculados = escoresParts.length > 0
+    ? escoresParts.join(' | ')
+    : 'Aguardando preenchimento completo de parâmetros vitais/antropométricos para cálculo de PAM, Índice de Choque, qSOFA e IMC.';
+
+  const exameFisicoSistemas = 'Exame físico registrado conforme dados informados no relato clínico. Sugestão propedêutica complementar à beira-leito: documentar ectoscopia, ausculta cardiopulmonar (ACV/AR), tempo de enchimento capilar (TEC) e exame segmentar direcionado à queixa principal.';
+
+  const textoObjetivoUnificado = [
+    `Sinais Vitais: ${sinaisVitaisFormatados}`,
+    `Escores e Métricas Determinísticas: ${escoresCalculados}`,
+    `Exame Físico / Propedêutica: ${exameFisicoSistemas}`
+  ].join('\n');
+
+  // 3. Avaliação e Plano Sindrômico Baseado em Diretrizes Brasileiras
+  const hipoteses = [];
+  const redFlags = [];
+  const prescricao = [];
+  const exames = [];
+  const orientacoes = [
+    'Manter hidratação adequada e adesão rigorosa aos horários das medicações prescritas.',
+    'Não utilizar anti-inflamatórios não esteroidais (AINEs) ou automedicação sem avaliação médica.'
+  ];
+  let raciocinio = '';
+  let retorno = 'Reavaliação clínica conforme evolução ou retorno imediato à Sala de Emergência / Pronto-Socorro diante de sinais de alarme.';
+  const referencias = [];
+
+  // Alertas hemodinâmicos baseados nos sinais vitais
+  if (calculated_metrics.pam !== undefined && calculated_metrics.pam !== null && calculated_metrics.pam < 65) {
+    redFlags.push(`Hipotensão arterial / Hipoperfusão tecidual (PAM ${calculated_metrics.pam} mmHg < 65 mmHg)`);
+  }
+  if (calculated_metrics.indice_choque !== undefined && calculated_metrics.indice_choque !== null && calculated_metrics.indice_choque >= 0.9) {
+    redFlags.push(`Índice de Choque elevado (${calculated_metrics.indice_choque}) sugerindo instabilidade hemodinâmica oculta`);
+  }
+  if (vitals.spo2 !== undefined && vitals.spo2 < 92) {
+    redFlags.push(`Hipoxemia aguda (SpO2 ${vitals.spo2}% < 92%) — avaliar suplementação de O2 imediata`);
+  }
+
+  if (/dor no peito|dor tor[áa]cica|precordial|angina|infarto|iam|sca/i.test(lower)) {
+    hipoteses.push(
+      {
+        cid10: 'I20.9',
+        descricao: 'Síndrome Coronariana Aguda / Dor Torácica em Investigação',
+        probabilidade: 'ALTA',
+        justificativa: 'Quadro de dor torácica aguda exigindo estratificação imediata com ECG de 12 derivações em até 10 minutos e troponina seriada.'
+      },
+      {
+        cid10: 'R07.4',
+        descricao: 'Dor Torácica Não Especificada (Diagnóstico Diferencial: Dissecção Aórtica, TEP, Pericardite)',
+        probabilidade: 'DIAGNOSTICO_DIFERENCIAL',
+        justificativa: 'Necessidade de exclusão de causas torácicas potencialmente fatais conforme protocolo de Sala Vermelha.'
+      }
+    );
+    redFlags.push(
+      'Irradiação para membro superior esquerdo, mandíbula ou dorso, sudorese fria, dispneia ou síncope',
+      'Instabilidade hemodinâmica, congestão pulmonar ou arritmias ventriculares'
+    );
+    raciocinio = 'Paciente com dor torácica aguda. Prioridade máxima na obtenção e laudo do ECG de 12 derivações em <= 10 minutos, monitorização contínua (MOV), coleta de troponina de alta sensibilidade e aplicação do escore HEART.';
+    prescricao.push(
+      {
+        via: 'Uso Oral',
+        medicamento: 'ácido acetilsalicílico',
+        concentracao: '100mg comprimido',
+        posologia: 'Mastigar e engolir 3 comprimidos (300mg) em dose de ataque (se ausentes contraindicações ou alergia)',
+        duracao: 'Dose única de ataque na admissão',
+        quantidade_dispensacao: '3 comprimidos',
+        orientacao_uso: 'Administrar imediatamente após excluir suspeita de dissecção aguda de aorta ou sangramento ativo.'
+      }
+    );
+    exames.push(
+      'Eletrocardiograma (ECG) de 12 derivações imediato (meta <= 10 min)',
+      'Troponina cardíaca (0h e 1h/3h conforme protocolo institucional)',
+      'Radiografia de tórax no leito, Hemograma, Creatinina, Eletrólitos'
+    );
+    referencias.push({
+      orgao: 'Sociedade Brasileira de Cardiologia (SBC)',
+      diretriz: 'Diretrizes da SBC sobre Angina Instável e Infarto Agudo do Miocárdio',
+      ano: '2021'
+    });
+  } else if (/tosse|pneumonia|dispneia|falta de ar|expectora[çc][ãa]o|febre/i.test(lower)) {
+    hipoteses.push(
+      {
+        cid10: 'J18.9',
+        descricao: 'Pneumonia Adquirida na Comunidade (PAC) / Infecção Respiratória Aguda',
+        probabilidade: 'ALTA',
+        justificativa: 'Sintomatologia respiratória aguda associada a sinais infecciosos/ventilatórios.'
+      },
+      {
+        cid10: 'J06.9',
+        descricao: 'Infecção Aguda das Vias Aéreas Superiores (IVAS)',
+        probabilidade: 'MODERADA',
+        justificativa: 'Diagnóstico diferencial em quadros respiratórios agudos sem consolidação radiológica.'
+      }
+    );
+    redFlags.push(
+      'Taquipneia acentuada (FR >= 30 irpm), hipoxemia (SpO2 < 90%), confusão mental ou hipotensão (critérios CURB-65)',
+      'Esforço ventilatório, tiragem intercostal ou rebaixamento do sensório'
+    );
+    raciocinio = 'Quadro respiratório agudo. Indicada estratificação de gravidade (CURB-65 / qSOFA), avaliação da oximetria de pulso e definição do local de tratamento (ambulatorial vs. hospitalar).';
+    prescricao.push(
+      {
+        via: 'Uso Oral',
+        medicamento: 'amoxicilina + clavulanato de potássio',
+        concentracao: '875mg + 125mg comprimido revestido',
+        posologia: 'Tomar 1 comprimido de 12 em 12 horas',
+        duracao: 'por 7 dias',
+        quantidade_dispensacao: '14 comprimidos',
+        orientacao_uso: 'Tomar no início das refeições para melhor tolerabilidade gastrointestinal (confirmar ausência de alergia a betalactâmicos).'
+      },
+      {
+        via: 'Uso Oral',
+        medicamento: 'dipirona sódica',
+        concentracao: '500mg comprimido',
+        posologia: 'Tomar 1 a 2 comprimidos de 6 em 6 horas se dor ou temperatura axilar >= 37,8 °C',
+        duracao: 'se dor ou febre',
+        quantidade_dispensacao: '10 comprimidos',
+        orientacao_uso: 'Respeitar dose máxima diária de 4g/dia em adultos.'
+      }
+    );
+    exames.push(
+      'Radiografia de tórax (PA e Perfil)',
+      'Hemograma completo, Proteína C Reativa (PCR), Ureia e Creatinina séricas'
+    );
+    referencias.push({
+      orgao: 'Sociedade Brasileira de Pneumologia e Tisiologia (SBPT)',
+      diretriz: 'Recomendações para o Manejo da Pneumonia Adquirida na Comunidade',
+      ano: '2022'
+    });
+  } else if (/dis[úu]ria|ard[êe]ncia.*urin|polaci[úu]ria|itu|cistite|pielonefrite|lombar/i.test(lower)) {
+    hipoteses.push(
+      {
+        cid10: 'N39.0',
+        descricao: 'Infecção do Trato Urinário (ITU) / Cistite Aguda',
+        probabilidade: 'ALTA',
+        justificativa: 'Sintomas irritativos do trato urinário inferior (disúria/polaciúria).'
+      },
+      {
+        cid10: 'N10',
+        descricao: 'Pielonefrite Aguda Não Obstrutiva',
+        probabilidade: 'DIAGNOSTICO_DIFERENCIAL',
+        justificativa: 'Avaliar presença de febre, calafrios ou sinal de Giordano positivo.'
+      }
+    );
+    redFlags.push('Febre alta persistente, calafrios, dor lombar com Giordano positivo, náuseas/vômitos incoercíveis ou sinais de sepse');
+    raciocinio = 'Quadro compatível com infecção do trato urinário. Diferenciar cistite não complicada de pielonefrite aguda para escolha antimicrobiana racional.';
+    prescricao.push(
+      {
+        via: 'Uso Oral',
+        medicamento: 'nitrofurantoína',
+        concentracao: '100mg cápsula',
+        posologia: 'Tomar 1 cápsula de 6 em 6 horas',
+        duracao: 'por 5 dias',
+        quantidade_dispensacao: '20 cápsulas',
+        orientacao_uso: 'Indicada para cistite aguda baixa não complicada (evitar se ClCr < 30 mL/min ou no termo da gestação).'
+      },
+      {
+        via: 'Uso Oral',
+        medicamento: 'dipirona sódica',
+        concentracao: '500mg comprimido',
+        posologia: 'Tomar 1 comprimido de 6 em 6 horas se dor',
+        duracao: 'se dor',
+        quantidade_dispensacao: '10 comprimidos',
+        orientacao_uso: 'Analgesia sintomática.'
+      }
+    );
+    exames.push('Urina tipo I (EAS) e Urocultura com antibiograma (se ITU complicada, gestante ou recidivante)');
+    referencias.push({
+      orgao: 'FEBRASGO / Sociedade Brasileira de Infectologia (SBI)',
+      diretriz: 'Diretrizes Brasileiras para Manejo de Infecção do Trato Urinário',
+      ano: '2023'
+    });
+  } else {
+    hipoteses.push(
+      {
+        cid10: 'R69',
+        descricao: ' Quadro Clínico Agudo em Investigação Diagnóstica',
+        probabilidade: 'ALTA',
+        justificativa: `Correlação clínica baseada na anamnese (${qp}) e parâmetros vitais registrados.`
+      }
+    );
+    redFlags.push(
+      'Piora clínica aguda, rebaixamento do nível de consciência, dispneia, hipotensão ou febre persistente refratária'
+    );
+    raciocinio = 'Avaliação clínica sistematizada estruturada a partir do relato livre e métricas determinísticas calculadas. Conduta voltada ao controle sintomático seguro e investigação complementar direcionada.';
+    prescricao.push(
+      {
+        via: 'Uso Oral',
+        medicamento: 'dipirona sódica',
+        concentracao: '500mg comprimido',
+        posologia: 'Tomar 1 comprimido de 6 em 6 horas se dor ou febre',
+        duracao: 'se dor ou febre',
+        quantidade_dispensacao: '10 comprimidos',
+        orientacao_uso: 'Confirmar ausência de alergia prévia a pirazolônicos antes da administração.'
+      }
+    );
+    exames.push('Avaliação laboratorial direcionada conforme evolução clínica (Hemograma, Função Renal, Eletrólitos)');
+    referencias.push({
+      orgao: 'Ministério da Saúde do Brasil',
+      diretriz: 'Protocolos Clínicos e Diretrizes Terapêuticas (PCDT) / Cadernos de Atenção Básica',
+      ano: '2024'
+    });
+  }
+
+  if (Array.isArray(tdc_evidences) && tdc_evidences.length > 0) {
+    for (const ev of tdc_evidences) {
+      if (ev && ev.title) {
+        referencias.push({
+          orgao: `Acervo Clínico TdC (${ev.specialty || ev.category || 'Clínica Médica'})`,
+          diretriz: ev.title,
+          ano: ev.edition_date ? String(ev.edition_date).slice(0, 4) : '2025'
+        });
+      }
+    }
+  }
+
+  return {
+    subjetivo_formatado: {
+      qp,
+      hda: `${prefixoDemografico}${hdaTecnica}`,
+      hpp_medicacoes: hppMedicacoes,
+      alergias: alergiasStr,
+      texto_unificado: textoSubjetivoUnificado
+    },
+    objetivo_formatado: {
+      sinais_vitais_formatados: sinaisVitaisFormatados,
+      exame_fisico_sistemas: exameFisicoSistemas,
+      escores_calculados: escoresCalculados,
+      texto_unificado: textoObjetivoUnificado
+    },
+    avaliacao: {
+      hipoteses_diagnosticas: hipoteses,
+      red_flags: redFlags,
+      raciocinio_clinico: raciocinio
+    },
+    plano: {
+      prescricao,
+      exames_solicitados: exames,
+      orientacoes_paciente: orientacoes,
+      criterios_retorno_encaminhamento: retorno
+    },
+    referencias_bibliograficas: referencias
+  };
+}
+
+/**
  * Gera a evolução clínica estruturada no padrão SOAP utilizando a Vertex AI com fallback resiliente.
  */
 async function generateSoapWithVertex({
@@ -281,12 +681,6 @@ async function generateSoapWithVertex({
   }
 
   const startTime = Date.now();
-  const credentials = loadCredentials();
-  const projectId = process.env.GOOGLE_CLOUD_PROJECT || credentials.project_id || DEFAULT_PROJECT_ID;
-  const location = DEFAULT_LOCATION;
-  const primaryModel = modelOverride || DEFAULT_MODEL;
-
-  const accessToken = await getAccessToken();
   const systemPrompt = buildClinicalSystemPrompt();
   const userPrompt = buildUserPrompt({
     brain_dump,
@@ -297,38 +691,81 @@ async function generateSoapWithVertex({
   });
 
   let soapObject = null;
-  let modelUsed = primaryModel;
+  let modelUsed = modelOverride || DEFAULT_MODEL;
 
-  try {
-    soapObject = await callVertexModel({
-      model: primaryModel,
-      systemPrompt,
-      userPrompt,
-      accessToken,
-      projectId,
-      location
-    });
-  } catch (primaryError) {
-    const isRecoverable =
-      !primaryError.statusCode ||
-      primaryError.statusCode === 429 ||
-      primaryError.statusCode === 404 ||
-      primaryError.statusCode >= 500 ||
-      /timeout/i.test(primaryError.message);
+  // 1. Tentativa via Service Account da Vertex AI (quando configurada)
+  const credentials = tryLoadCredentials();
+  if (credentials) {
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT || credentials.project_id || DEFAULT_PROJECT_ID;
+    const location = DEFAULT_LOCATION;
+    const primaryModel = modelOverride || DEFAULT_MODEL;
 
-    if (isRecoverable && primaryModel !== FALLBACK_MODEL) {
-      modelUsed = FALLBACK_MODEL;
+    try {
+      const accessToken = await getAccessToken();
       soapObject = await callVertexModel({
-        model: FALLBACK_MODEL,
+        model: primaryModel,
         systemPrompt,
         userPrompt,
         accessToken,
         projectId,
         location
       });
-    } else {
-      throw primaryError;
+      modelUsed = primaryModel;
+    } catch (primaryError) {
+      const isRecoverable =
+        !primaryError.statusCode ||
+        primaryError.statusCode === 429 ||
+        primaryError.statusCode === 404 ||
+        primaryError.statusCode >= 500 ||
+        /timeout/i.test(primaryError.message);
+
+      if (isRecoverable && primaryModel !== FALLBACK_MODEL) {
+        try {
+          const accessToken = await getAccessToken();
+          modelUsed = FALLBACK_MODEL;
+          soapObject = await callVertexModel({
+            model: FALLBACK_MODEL,
+            systemPrompt,
+            userPrompt,
+            accessToken,
+            projectId,
+            location
+          });
+        } catch (_) {
+          soapObject = null;
+        }
+      }
     }
+  }
+
+  // 2. Tentativa via Gemini API Key (quando configurada no ambiente)
+  if (!soapObject) {
+    const geminiApiKey = getConfiguredGeminiApiKey();
+    if (geminiApiKey) {
+      try {
+        soapObject = await callGeminiApiKeyModel({
+          apiKey: geminiApiKey,
+          model: modelOverride || 'gemini-2.5-flash',
+          systemPrompt,
+          userPrompt
+        });
+        modelUsed = 'gemini-2.5-flash';
+      } catch (_) {
+        soapObject = null;
+      }
+    }
+  }
+
+  // 3. Fallback Clínico Determinístico Local (RAM + RAG TdC)
+  if (!soapObject) {
+    soapObject = buildDeterministicClinicalSoap({
+      brain_dump,
+      patient_context,
+      vitals,
+      calculated_metrics,
+      tdc_evidences
+    });
+    modelUsed = 'motor-clinico-deterministico-local';
   }
 
   const executionTimeMs = Date.now() - startTime;
@@ -344,5 +781,6 @@ async function generateSoapWithVertex({
 
 module.exports = {
   generateSoapWithVertex,
-  buildClinicalSystemPrompt
+  buildClinicalSystemPrompt,
+  buildDeterministicClinicalSoap
 };

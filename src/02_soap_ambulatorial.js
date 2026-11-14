@@ -3214,10 +3214,8 @@ function avaliarSuficienciaAnamnese(contextoAcumulado, historicoSessao) {
   return SoapAmbulatorialService.avaliarSuficienciaAnamnese(contextoAcumulado, historicoSessao);
 }
 
-function processarEntradaSoap(chatId, textoEntrada, opcoes) {
-  return SoapAmbulatorialService.processarEntradaSoap(chatId, textoEntrada, opcoes);
-}
-
+// Nota arquitetural: o despacho global de processarEntradaSoap reside em 12_experiencia_bot.js.
+// SoapAmbulatorialService.processarEntradaSoap permanece exportado para uso modular isolado.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = SoapAmbulatorialService;
 }

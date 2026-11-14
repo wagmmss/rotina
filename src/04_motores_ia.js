@@ -1242,9 +1242,20 @@ function chamarOllamaNativoAPI(sistema, promptUsuario, maxTokens, modelo) {
   }, 2000, maxTokens);
 }
 
-function executarFallbackLocalOffline(arg1, arg2, arg3, arg4) {
+function _iaResolverFallbackLocalExport() {
+  if (typeof executarFallbackLocalOffline === "function") {
+    return executarFallbackLocalOffline;
+  }
   if (typeof IaLocalFallbackService !== "undefined" && IaLocalFallbackService && typeof IaLocalFallbackService.executarFallbackLocalOffline === "function") {
-    return IaLocalFallbackService.executarFallbackLocalOffline(arg1, arg2, arg3, arg4);
+    return IaLocalFallbackService.executarFallbackLocalOffline;
+  }
+  if (typeof require === "function") {
+    try {
+      var modFb = require("./04_ia_local_fallback.js");
+      if (modFb && typeof modFb.executarFallbackLocalOffline === "function") {
+        return modFb.executarFallbackLocalOffline;
+      }
+    } catch (_) {}
   }
   return null;
 }
@@ -3804,7 +3815,7 @@ if (typeof module !== "undefined" && module.exports) {
     chamarLocalLlmAPI: chamarLocalLlmAPI,
     _iaChamarOllamaNativo: _iaChamarOllamaNativo,
     chamarOllamaNativoAPI: chamarOllamaNativoAPI,
-    executarFallbackLocalOffline: executarFallbackLocalOffline,
+    executarFallbackLocalOffline: _iaResolverFallbackLocalExport(),
     verificarSaudeLocalLlm: verificarSaudeLocalLlm,
     cockpitLocalLlm: cockpitLocalLlm,
     _iaNormalizarBase64: _iaNormalizarBase64,

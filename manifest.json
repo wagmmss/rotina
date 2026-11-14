@@ -1,34 +1,26 @@
 {
-  "id": "/",
-  "name": "Ultra Rotina — Cockpit Móvel",
+  "name": "Ultra Rotina",
   "short_name": "Cockpit",
-  "description": "Assistente Clínico & Cockpit PWA para rotina médica, cálculos e protocolos de plantão",
-  "start_url": "/cockpit",
-  "scope": "/",
+  "description": "Cockpit Clínico Móvel, Central de Rotina Médica Time-Blocking e Preceptor Socrático",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#020617",
-  "theme_color": "#020617",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
   "lang": "pt-BR",
-  "categories": ["medical", "health", "productivity"],
   "icons": [
     {
-      "src": "/pwa-192x192.png",
+      "src": "./pwa-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
-      "src": "/pwa-512x512.png",
+      "src": "./pwa-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/pwa-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ]
 }

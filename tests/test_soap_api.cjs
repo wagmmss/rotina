@@ -86,4 +86,31 @@ describe('SOAP Clinical API & Formatting Suite', () => {
     assert.ok(formattedPrescription.includes('Ibuprofeno 400mg'));
     assert.ok(formattedPrescription.includes('1 comprimido de 8/8h por 3 dias'));
   });
+
+  it('Teste 5: POST /api/clinical/soap com caso clínico válido retorna HTTP 200 e SOAP estruturado', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/clinical/soap',
+      payload: {
+        brain_dump: 'Paciente 58 anos com dor no peito retroesternal há 2 horas e falta de ar.',
+        idade: 58,
+        sexo: 'M',
+        pas: 150,
+        pad: 95,
+        fc: 98,
+        spo2: 96
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.success, true);
+    assert.ok(body.data.subjetivo_formatado);
+    assert.ok(body.data.objetivo_formatado);
+    assert.ok(body.data.avaliacao);
+    assert.ok(body.data.plano);
+    assert.ok(body.clipboard.soap_text.includes('SUBJETIVO'));
+    assert.ok(body.calculated_metrics.pam > 0);
+  });
 });

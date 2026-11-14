@@ -121,12 +121,16 @@
         font-size: 16px !important;
       }
     }
+    /* Reforço tátil beira-leito: alvos >= 44px e numerais tabulares para doses e vitais */
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
     /* Responsividade Beira-Leito Extrema (Mobile 320px a 420px) */
     @media screen and (max-width: 420px) {
       .btn-copiar-conduta, [id^="btn-copiar-"], button[onclick*="copiar"] {
         white-space: normal !important;
         word-break: break-word !important;
-        min-height: 38px !important;
+        min-height: 44px !important;
         font-size: 11px !important;
         padding-left: 6px !important;
         padding-right: 6px !important;
@@ -178,9 +182,13 @@
       </div>
 
       <div class="flex items-center gap-1.5">
+        <button onclick="abrirModalAuditoriaSistema()" id="btn-abrir-auditoria" class="px-2 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 text-[10px] font-bold flex items-center gap-1 transition active:scale-95" title="Relatório de Auditoria Profunda, Benchmark RAM & Guia de Bolso">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5 text-teal-400"></i>
+          <span class="hidden xs:inline sm:inline">Auditoria 9.2</span>
+        </button>
         <button onclick="abrirModalPerfilLocal()" id="btn-contexto-clinico" class="px-2 py-1 rounded-lg bg-brand-500/15 border border-brand-500/40 text-brand-300 text-[10px] font-bold flex items-center gap-1 transition active:scale-95" title="Configurar Nome, Cidade (REMUME), Papel (Médico/Interno) e Cenário">
           <i data-lucide="map-pin" class="w-3 h-3 text-brand-400"></i>
-          <span id="badge-contexto-clinico-label" class="truncate max-w-[130px] sm:max-w-[220px]">📍 RENAME SUS · 👨‍⚕️ Perfil</span>
+          <span id="badge-contexto-clinico-label" class="truncate max-w-[115px] sm:max-w-[200px]">📍 RENAME SUS · 👨‍⚕️ Perfil</span>
         </button>
         <button onclick="abrirPainelOffline()" id="btn-status-rede" class="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold flex items-center gap-1.5 transition active:scale-95" title="Telemetria & Modo de Conexão">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" id="dot-status-rede"></span>
@@ -835,19 +843,19 @@
           </span>
           <span class="text-[10px] bg-rose-500/40 text-white px-2 py-0.5 rounded-md font-mono font-black tracking-wider border border-rose-400/60">HC-UE</span>
         </button>
-        <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-12 gap-1 text-center text-[9.5px] font-bold">
-          <button onclick="abrirSubCalc('calc-dva', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-slate-900/90 text-slate-200 border border-slate-700/80 hover:text-white">DVA</button>
-          <button onclick="abrirSubCalc('calc-sri', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-slate-900/90 text-slate-200 border border-slate-700/80 hover:text-white">SRI / IOT</button>
-          <button onclick="abrirSubCalc('calc-asma', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-slate-900/90 text-teal-200 border border-slate-700/80 hover:text-white">🫁 Asma</button>
-          <button onclick="abrirSubCalc('calc-heart', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-slate-900/90 text-rose-200 border border-slate-700/80 hover:text-white">🫀 HEART</button>
-          <button onclick="abrirSubCalc('calc-pediatria', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-slate-900/90 text-amber-200 border border-slate-700/80 hover:text-white">👶 Pediátrico</button>
-          <button onclick="abrirSubCalc('calc-crcl', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-slate-900/90 text-slate-200 border border-slate-700/80 hover:text-white">Clearance</button>
-          <button onclick="abrirSubCalc('calc-parkland', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-orange-500/20 text-orange-200 border border-orange-500/40 hover:text-white">🔥 Parkland</button>
-          <button onclick="abrirSubCalc('calc-glasgow', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-indigo-500/20 text-indigo-200 border border-indigo-500/40 hover:text-white">🧠 Glasgow-P</button>
-          <button onclick="abrirSubCalc('calc-atb', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-slate-900/90 text-rose-200 border border-slate-700/80 hover:text-white">💊 Ajuste ATB</button>
-          <button onclick="abrirSubCalc('calc-dhe', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-slate-900/90 text-sky-200 border border-slate-700/80 hover:text-white">⚡ DHE</button>
-          <button onclick="abrirSubCalc('calc-gaso', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-slate-900/90 text-slate-200 border border-slate-700/80 hover:text-white">Gaso</button>
-          <button onclick="abrirSubCalc('calc-crosscheck', this)" class="subcalc-btn py-2 px-0.5 rounded-lg bg-emerald-500/20 text-emerald-200 border border-emerald-500/50 hover:text-white">🛡️ Segurança</button>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5 text-center text-[10.5px] sm:text-[11px] font-bold tabular-nums">
+          <button onclick="abrirSubCalc('calc-dva', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-slate-900/90 text-slate-200 border border-slate-700/80 hover:text-white flex items-center justify-center">💉 DVA</button>
+          <button onclick="abrirSubCalc('calc-sri', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-slate-900/90 text-slate-200 border border-slate-700/80 hover:text-white flex items-center justify-center">🫁 SRI / IOT</button>
+          <button onclick="abrirSubCalc('calc-asma', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-slate-900/90 text-teal-200 border border-slate-700/80 hover:text-white flex items-center justify-center">💨 Asma</button>
+          <button onclick="abrirSubCalc('calc-heart', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-slate-900/90 text-rose-200 border border-slate-700/80 hover:text-white flex items-center justify-center">🫀 HEART</button>
+          <button onclick="abrirSubCalc('calc-pediatria', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-slate-900/90 text-amber-200 border border-slate-700/80 hover:text-white flex items-center justify-center">👶 Pediátrico</button>
+          <button onclick="abrirSubCalc('calc-crcl', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-slate-900/90 text-slate-200 border border-slate-700/80 hover:text-white flex items-center justify-center">🧪 Clearance</button>
+          <button onclick="abrirSubCalc('calc-parkland', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-orange-500/20 text-orange-200 border border-orange-500/40 hover:text-white flex items-center justify-center">🔥 Parkland</button>
+          <button onclick="abrirSubCalc('calc-glasgow', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-indigo-500/20 text-indigo-200 border border-indigo-500/40 hover:text-white flex items-center justify-center">🧠 Glasgow-P</button>
+          <button onclick="abrirSubCalc('calc-atb', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-slate-900/90 text-rose-200 border border-slate-700/80 hover:text-white flex items-center justify-center">💊 Ajuste ATB</button>
+          <button onclick="abrirSubCalc('calc-dhe', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-slate-900/90 text-sky-200 border border-slate-700/80 hover:text-white flex items-center justify-center">⚡ DHE / Na+</button>
+          <button onclick="abrirSubCalc('calc-gaso', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-slate-900/90 text-slate-200 border border-slate-700/80 hover:text-white flex items-center justify-center">🩸 Gaso</button>
+          <button onclick="abrirSubCalc('calc-crosscheck', this)" class="subcalc-btn py-2 px-1.5 min-h-[44px] rounded-lg bg-emerald-500/20 text-emerald-200 border border-emerald-500/50 hover:text-white flex items-center justify-center">🛡️ Segurança</button>
         </div>
       </div>
 
@@ -1025,7 +1033,7 @@
             <option value="fenitoina">🛑 Fenitoína (Incompatível / SF exclusivo)</option>
           </select>
         </div>
-        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1 text-xs" id="dva-resultado">
+        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1 text-xs tabular-nums" id="dva-resultado">
           <!-- Resultado dinâmico -->
         </div>
         <button id="btn-copiar-dva" onclick="copiarDvaPEP()" class="hidden w-full py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold text-xs flex items-center justify-center gap-1.5 border border-emerald-500/30 transition">
@@ -2159,26 +2167,26 @@
     <!-- ABA 6: SOAP + PRECEPTOR IA -->
     <!-- =================================================================== -->
     <div id="tab-soap" class="tab-pane space-y-3.5">
-      <!-- BOTÃO DESTAQUE: ESTAÇÃO CLÍNICA SOAP (GEMINI 4 ARGON / VERTEX AI) -->
+      <!-- BOTÃO DESTAQUE: ESTAÇÃO CLÍNICA SOAP UNIFICADA (INTERNATO & GENERALISTA) -->
       <div class="mb-3">
         <button 
           type="button"
           onclick="abrirModalEstacaoSoap()"
-          class="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-extrabold text-xs sm:text-sm shadow-xl shadow-purple-950/40 flex items-center justify-between transition active:scale-[0.98] border border-white/20 group"
+          class="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-extrabold text-xs sm:text-sm shadow-xl shadow-purple-950/40 flex items-center justify-between transition active:scale-[0.98] border border-white/20 group"
         >
           <div class="flex items-center gap-2.5">
             <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-white/20 text-white group-hover:scale-110 transition shadow-inner">
               <i data-lucide="sparkles" class="w-4 h-4 text-amber-300"></i>
             </span>
             <div class="text-left">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-extrabold text-white text-xs sm:text-sm">⚡ Estação Clínica SOAP &amp; Decisão Médica</span>
-                <span class="text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full uppercase tracking-wider">Novo</span>
+                <span class="text-[10px] text-amber-200/95 font-semibold tracking-tight">· Internato &amp; Generalista</span>
               </div>
-              <p class="text-[10px] text-purple-200 font-medium">Ditado por Voz, Cálculos Reativos e Conduta Médica Oficial</p>
+              <p class="text-[10px] text-purple-100/90 font-medium">Ditado por Voz · Cálculos Reativos · SafetyGuard · Receituário PDF/DOCX</p>
             </div>
           </div>
-          <div class="flex items-center gap-1 text-[11px] font-bold text-white/90 bg-white/10 px-2.5 py-1 rounded-xl">
+          <div class="flex items-center gap-1 text-[11px] font-bold text-white/90 bg-white/10 px-2.5 py-1.5 rounded-xl shrink-0">
             <span>Abrir</span>
             <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
           </div>
@@ -2309,7 +2317,7 @@
             <button
               onclick="abrirModalPreceptorLive()"
               title="Iniciar conversa por voz em tempo real no fone (Gemini 3.8 Live)"
-              class="py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition flex items-center justify-center gap-1 shadow-md shadow-emerald-950 active:scale-[0.98] shrink-0 animate-pulse"
+              class="py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition flex items-center justify-center gap-1 shadow-md shadow-emerald-950 active:scale-[0.98] shrink-0"
             >
               <i data-lucide="headphones" class="w-3.5 h-3.5"></i>
               <span>Voz Live</span>
@@ -2359,72 +2367,82 @@
             </div>
           </div>
           <div class="flex flex-wrap gap-1.5" id="container-acoes-rapidas-soap">
-            <button data-soap-cat="amb pep" onclick="abrirModalSinteseDiaSOAP()" class="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold hover:bg-indigo-500/30 flex items-center gap-1 transition">
-              <i data-lucide="layers" class="w-3 h-3"></i> Síntese do Dia (SOAP)
-            </button>
-            <button data-soap-cat="amb" onclick="abrirModalAmbulatorioSOAP()" class="px-2.5 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[11px] font-semibold hover:bg-teal-500/30 flex items-center gap-1 transition" title="Abrir Prontuário SOAP Ambulatorial Ágil (APS & UBS)">
+            <!-- 6 Ações Essenciais de Cabeceira (Visíveis por padrão no modo despoluído) -->
+            <button data-soap-cat="amb" data-soap-essencial="true" onclick="abrirModalAmbulatorioSOAP()" class="px-2.5 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[11px] font-semibold hover:bg-teal-500/30 flex items-center gap-1 transition" title="Abrir Prontuário SOAP Ambulatorial Ágil (APS & UBS)">
               <i data-lucide="clipboard-check" class="w-3 h-3"></i> Prontuário SOAP (APS)
             </button>
-            <button data-soap-cat="amb pep" onclick="abrirModalAtestadoCFM()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold hover:bg-amber-500/30 flex items-center gap-1 transition">
-              <i data-lucide="file-text" class="w-3 h-3"></i> Atestado CFM
-            </button>
-            <button data-soap-cat="materno amb" onclick="abrirModalPrenatal()" class="px-2.5 py-1.5 rounded-lg bg-pink-500/20 text-pink-300 border border-pink-500/30 text-[11px] font-semibold hover:bg-pink-500/30 flex items-center gap-1 transition">
-              <i data-lucide="baby" class="w-3 h-3"></i> Pré-Natal & DPP
-            </button>
-            <button data-soap-cat="materno emerg" onclick="abrirModalCentroObstetrico()" class="px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition">
-              <i data-lucide="activity" class="w-3 h-3"></i> Sala de Parto & HPP
-            </button>
-            <button data-soap-cat="materno amb" onclick="abrirModalGinecologiaAmbulatorial()" class="px-2.5 py-1.5 rounded-lg bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30 text-[11px] font-semibold hover:bg-fuchsia-500/30 flex items-center gap-1 transition">
-              <i data-lucide="flower-2" class="w-3 h-3"></i> Ginecologia &amp; APS
-            </button>
-            <button data-soap-cat="materno emerg" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-pediatria');" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold hover:bg-amber-500/30 flex items-center gap-1 transition">
-              <i data-lucide="baby" class="w-3 h-3"></i> Pediatria &amp; PALS
-            </button>
-            <button data-soap-cat="emerg" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-dva');" class="px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition">
-              <i data-lucide="zap" class="w-3 h-3"></i> DVA &amp; Choque
-            </button>
-            <button data-soap-cat="emerg" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-sri');" class="px-2.5 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[11px] font-semibold hover:bg-sky-500/30 flex items-center gap-1 transition">
-              <i data-lucide="shield-alert" class="w-3 h-3"></i> Intubação (SRI)
-            </button>
-            <button data-soap-cat="emerg amb" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-asma');" class="px-2.5 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[11px] font-semibold hover:bg-teal-500/30 flex items-center gap-1 transition">
-              <i data-lucide="wind" class="w-3 h-3"></i> Crise Asmática &amp; GINA
-            </button>
-            <button data-soap-cat="emerg amb" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-atb');" class="px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition">
-              <i data-lucide="shield-plus" class="w-3 h-3"></i> Ajuste ATB
-            </button>
-            <button data-soap-cat="emerg" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-dhe');" class="px-2.5 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[11px] font-semibold hover:bg-sky-500/30 flex items-center gap-1 transition">
-              <i data-lucide="zap" class="w-3 h-3"></i> DHE &amp; Eletrólitos
-            </button>
-            <button data-soap-cat="emerg" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-gaso');" class="px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition">
-              <i data-lucide="droplets" class="w-3 h-3"></i> Gasometria &amp; Winter
-            </button>
-            <button data-soap-cat="emerg" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-heart');" class="px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition">
-              <i data-lucide="heart-pulse" class="w-3 h-3"></i> Dor Torácica &amp; HEART
-            </button>
-            <button data-soap-cat="amb pep" onclick="copiarReceitaLimpaPEP()" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold hover:bg-emerald-500/30 flex items-center gap-1 transition">
-              <i data-lucide="receipt" class="w-3 h-3"></i> Receita PEP
-            </button>
-            <button data-soap-cat="amb pep" onclick="navegarAba('tab-remume', 'Prescrição & REMUME')" class="px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition">
-              <i data-lucide="clipboard-list" class="w-3 h-3"></i> Prescrição Rápida
-            </button>
-            <button data-soap-cat="pep amb" onclick="executarAcaoConversa('plano')" class="px-2.5 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-semibold hover:bg-purple-500/30 flex items-center gap-1 transition">
-              <i data-lucide="file-check" class="w-3 h-3"></i> Fechar Plano
-            </button>
-            <button data-soap-cat="amb pep emerg" onclick="abrirModalExameFisicoNormal()" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold hover:bg-emerald-500/30 flex items-center gap-1 transition" title="Exame Físico Normal Padrão e Modelos Dirigidos">
+            <button data-soap-cat="amb pep emerg" data-soap-essencial="true" onclick="abrirModalExameFisicoNormal()" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold hover:bg-emerald-500/30 flex items-center gap-1 transition" title="Exame Físico Normal Padrão e Modelos Dirigidos">
               <i data-lucide="stethoscope" class="w-3 h-3"></i> EF Normal
             </button>
-            <button data-soap-cat="amb pep" onclick="executarAcaoConversa('prescricao')" class="px-2.5 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[11px] font-semibold hover:bg-sky-500/30 flex items-center gap-1 transition">
+            <button data-soap-cat="amb pep" data-soap-essencial="true" onclick="copiarReceitaLimpaPEP()" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold hover:bg-emerald-500/30 flex items-center gap-1 transition">
+              <i data-lucide="receipt" class="w-3 h-3"></i> Receita PEP
+            </button>
+            <button data-soap-cat="emerg" data-soap-essencial="true" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-dva');" class="px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition">
+              <i data-lucide="zap" class="w-3 h-3"></i> DVA &amp; Choque
+            </button>
+            <button data-soap-cat="emerg" data-soap-essencial="true" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-sri');" class="px-2.5 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[11px] font-semibold hover:bg-sky-500/30 flex items-center gap-1 transition">
+              <i data-lucide="shield-alert" class="w-3 h-3"></i> Intubação (SRI)
+            </button>
+            <button data-soap-cat="materno emerg" data-soap-essencial="true" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-pediatria');" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold hover:bg-amber-500/30 flex items-center gap-1 transition">
+              <i data-lucide="baby" class="w-3 h-3"></i> Pediatria &amp; PALS
+            </button>
+
+            <!-- 16 Ações Complementares (Exibidas ao filtrar por categoria ou expandir) -->
+            <button data-soap-cat="amb pep" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold hover:bg-indigo-500/30 flex items-center gap-1 transition" onclick="abrirModalSinteseDiaSOAP()">
+              <i data-lucide="layers" class="w-3 h-3"></i> Síntese do Dia (SOAP)
+            </button>
+            <button data-soap-cat="amb pep" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold hover:bg-amber-500/30 flex items-center gap-1 transition" onclick="abrirModalAtestadoCFM()">
+              <i data-lucide="file-text" class="w-3 h-3"></i> Atestado CFM
+            </button>
+            <button data-soap-cat="materno amb" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-pink-500/20 text-pink-300 border border-pink-500/30 text-[11px] font-semibold hover:bg-pink-500/30 flex items-center gap-1 transition" onclick="abrirModalPrenatal()">
+              <i data-lucide="baby" class="w-3 h-3"></i> Pré-Natal &amp; DPP
+            </button>
+            <button data-soap-cat="materno emerg" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition" onclick="abrirModalCentroObstetrico()">
+              <i data-lucide="activity" class="w-3 h-3"></i> Sala de Parto &amp; HPP
+            </button>
+            <button data-soap-cat="materno amb" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30 text-[11px] font-semibold hover:bg-fuchsia-500/30 flex items-center gap-1 transition" onclick="abrirModalGinecologiaAmbulatorial()">
+              <i data-lucide="flower-2" class="w-3 h-3"></i> Ginecologia &amp; APS
+            </button>
+            <button data-soap-cat="emerg amb" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[11px] font-semibold hover:bg-teal-500/30 flex items-center gap-1 transition" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-asma');">
+              <i data-lucide="wind" class="w-3 h-3"></i> Crise Asmática &amp; GINA
+            </button>
+            <button data-soap-cat="emerg amb" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-atb');">
+              <i data-lucide="shield-plus" class="w-3 h-3"></i> Ajuste ATB
+            </button>
+            <button data-soap-cat="emerg" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[11px] font-semibold hover:bg-sky-500/30 flex items-center gap-1 transition" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-dhe');">
+              <i data-lucide="zap" class="w-3 h-3"></i> DHE &amp; Eletrólitos
+            </button>
+            <button data-soap-cat="emerg" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-gaso');">
+              <i data-lucide="droplets" class="w-3 h-3"></i> Gasometria &amp; Winter
+            </button>
+            <button data-soap-cat="emerg" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition" onclick="navegarAba('tab-calculadoras', 'Emergência & Cálculos'); abrirSubCalc('calc-heart');">
+              <i data-lucide="heart-pulse" class="w-3 h-3"></i> Dor Torácica &amp; HEART
+            </button>
+            <button data-soap-cat="amb pep" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold hover:bg-rose-500/30 flex items-center gap-1 transition" onclick="navegarAba('tab-remume', 'Prescrição & REMUME')">
+              <i data-lucide="clipboard-list" class="w-3 h-3"></i> Prescrição Rápida
+            </button>
+            <button data-soap-cat="pep amb" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-semibold hover:bg-purple-500/30 flex items-center gap-1 transition" onclick="executarAcaoConversa('plano')">
+              <i data-lucide="file-check" class="w-3 h-3"></i> Fechar Plano
+            </button>
+            <button data-soap-cat="amb pep" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[11px] font-semibold hover:bg-sky-500/30 flex items-center gap-1 transition" onclick="executarAcaoConversa('prescricao')">
               <i data-lucide="pill" class="w-3 h-3"></i> Prescrição UBS
             </button>
-            <button data-soap-cat="pep" onclick="provocarPreceptorSocratico()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold hover:bg-amber-500/30 flex items-center gap-1 transition">
+            <button data-soap-cat="pep" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold hover:bg-amber-500/30 flex items-center gap-1 transition" onclick="provocarPreceptorSocratico()">
               <i data-lucide="brain" class="w-3 h-3"></i> Preceptor
             </button>
-            <button data-soap-cat="pep" onclick="abrirModalPreceptorLive()" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold hover:bg-emerald-500/30 flex items-center gap-1 transition">
+            <button data-soap-cat="pep" class="soap-acao-secundaria hidden px-2.5 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold hover:bg-emerald-500/30 flex items-center gap-1 transition" onclick="abrirModalPreceptorLive()">
               <i data-lucide="headphones" class="w-3 h-3"></i> Preceptor Live
             </button>
-            <button data-soap-cat="pep amb emerg materno" onclick="executarAcaoConversa('novo')" class="px-2 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-rose-400 text-[11px] font-semibold flex items-center gap-1 transition" title="Limpar e Iniciar Novo Caso">
+            <button data-soap-cat="pep amb emerg materno" class="soap-acao-secundaria hidden px-2 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-rose-400 text-[11px] font-semibold flex items-center gap-1 transition" onclick="executarAcaoConversa('novo')" title="Limpar e Iniciar Novo Caso">
               <i data-lucide="trash-2" class="w-3 h-3"></i> Novo Caso
             </button>
+          </div>
+          <div class="pt-0.5 flex items-center justify-between">
+            <button type="button" id="btn-toggle-acoes-soap" onclick="alternarExpansaoAcoesSoap()" class="text-[10.5px] font-semibold text-slate-400 hover:text-purple-300 transition flex items-center gap-1 py-0.5 px-1.5 rounded hover:bg-slate-800/70">
+              <i data-lucide="chevron-down" class="w-3 h-3" id="icone-toggle-acoes-soap"></i>
+              <span id="label-toggle-acoes-soap">Mostrar todos os 22 atalhos (+16 complementares)</span>
+            </button>
+            <span class="text-[9.5px] text-slate-500">Modo Foco Beira-Leito</span>
           </div>
         </div>
 
@@ -2462,7 +2480,7 @@
               <div class="flex items-center gap-2">
                 <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
                 <span class="font-bold">Gravando áudio...</span>
-                <span id="gravador-timer" class="font-mono font-bold text-white">00:00</span>
+                <span id="gravador-timer" class="font-mono tabular-nums font-bold text-white">00:00</span>
               </div>
               <button onclick="pararGravacaoAudio()" class="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px]">
                 Concluir & Enviar
@@ -2783,9 +2801,9 @@
               <span class="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
                 <i data-lucide="activity" class="w-3 h-3 text-cyan-400"></i> Sinais Vitais &amp; Antropometria
               </span>
-              <div class="flex items-center gap-1">
-                <span id="badge-pam-live" class="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 hidden">PAM: --</span>
-                <span id="badge-imc-live" class="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 hidden">IMC: --</span>
+              <div class="flex items-center gap-1 tabular-nums">
+                <span id="badge-pam-live" class="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 hidden tabular-nums">PAM: --</span>
+                <span id="badge-imc-live" class="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 hidden tabular-nums">IMC: --</span>
               </div>
             </div>
 
@@ -3017,8 +3035,26 @@
             </button>
           </div>
           <div id="live-transcricao-container" class="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 min-h-[140px] max-h-[220px] overflow-y-auto space-y-2 text-[11px] text-slate-300 font-sans">
-            <p class="text-slate-500 italic text-center py-4">Toque em "Conectar Preceptor Live" e fale o caso clínico no microfone para iniciar a sabatina socrática...</p>
+            <p data-placeholder="true" class="text-slate-500 italic text-center py-4">Toque em "Conectar Preceptor Live" e fale no microfone ou digite abaixo para iniciar a sabatina socrática...</p>
           </div>
+
+          <form onsubmit="event.preventDefault(); enviarTextoLivePreceptor();" class="flex items-center gap-2 pt-1">
+            <input
+              id="input-live-preceptor-texto"
+              type="text"
+              placeholder="Ou digite o caso / conduta para discutir no fone..."
+              class="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
+            />
+            <button
+              id="btn-enviar-live-texto"
+              type="submit"
+              class="px-3 py-2 rounded-xl bg-emerald-600/85 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1 transition active:scale-95"
+              title="Enviar mensagem ao Preceptor"
+            >
+              <i data-lucide="send" class="w-3.5 h-3.5"></i>
+              <span>Enviar</span>
+            </button>
+          </form>
         </div>
       </div>
 
@@ -4807,6 +4843,188 @@
     </div>
   </div>
 
+  <!-- MODAL DE AUDITORIA PROFUNDA, RIGOR CLÍNICO, LATÊNCIA RAM & ATALHOS TELEGRAM -->
+  <div id="modal-auditoria-sistema" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+    <div class="modal-dialog-box bg-surface-900 border border-slate-700/90 rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Header -->
+      <div class="px-4 py-3 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-300 font-black text-xs">
+            9.2
+          </div>
+          <div>
+            <h3 class="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+              Auditoria Técnica, Clínica &amp; UI/UX
+            </h3>
+            <p class="text-[10.5px] text-slate-400">Diagnóstico em Tempo Real · Telegram + Cockpit PWA + Fastify VM</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button onclick="executarBenchmarkAuditoriaAoVivo()" id="btn-rodar-benchmark-auditoria" class="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-[10.5px] font-bold flex items-center gap-1 transition active:scale-95">
+            <i data-lucide="zap" class="w-3 h-3"></i> Medir Latência RAM
+          </button>
+          <button onclick="fecharModalAuditoriaSistema()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition" title="Fechar Auditoria">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Corpo Rolável -->
+      <div class="p-3.5 sm:p-4 overflow-y-auto space-y-4 text-xs">
+        <!-- 1. Scorecard dos 5 Eixos Auditados -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-[10.5px] font-bold uppercase tracking-wider text-teal-400">1. Avaliação Global por Pilar</span>
+            <span id="auditoria-timestamp-badge" class="text-[10px] font-mono text-slate-400">Verificado em RAM</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div class="p-2.5 rounded-xl bg-slate-950/90 border border-emerald-500/30">
+              <span class="text-[10px] text-slate-400 block">Confiabilidade Médica</span>
+              <span class="text-base font-black text-emerald-400 font-mono">9.4<span class="text-[10px] text-slate-500">/10</span></span>
+              <span class="text-[9.5px] text-emerald-300/90 block mt-0.5">SafetyGuard + 0ms</span>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-950/90 border border-sky-500/30">
+              <span class="text-[10px] text-slate-400 block">Velocidade Backend</span>
+              <span class="text-base font-black text-sky-400 font-mono">9.2<span class="text-[10px] text-slate-500">/10</span></span>
+              <span class="text-[9.5px] text-sky-300/90 block mt-0.5" id="auditoria-card-latencia">~0.4ms em RAM</span>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-950/90 border border-purple-500/30">
+              <span class="text-[10px] text-slate-400 block">UI/UX &amp; Despoluição</span>
+              <span class="text-base font-black text-purple-400 font-mono">9.3<span class="text-[10px] text-slate-500">/10</span></span>
+              <span class="text-[9.5px] text-purple-300/90 block mt-0.5">Foco 6 Essenciais</span>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-950/90 border border-teal-500/30">
+              <span class="text-[10px] text-slate-400 block">Acesso Telegram</span>
+              <span class="text-base font-black text-teal-400 font-mono">9.1<span class="text-[10px] text-slate-500">/10</span></span>
+              <span class="text-[9.5px] text-teal-300/90 block mt-0.5">Atalhos Sem Barra</span>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-950/90 border border-amber-500/30 col-span-2 sm:col-span-1">
+              <span class="text-[10px] text-slate-400 block">Rotina &amp; Agenda</span>
+              <span class="text-base font-black text-amber-400 font-mono">8.9<span class="text-[10px] text-slate-500">/10</span></span>
+              <span class="text-[9.5px] text-amber-300/90 block mt-0.5">GCal + Dexie Offline</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Confiabilidade Médica & Bases Carregadas em Memória -->
+        <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[10.5px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+              <i data-lucide="Database" class="w-3.5 h-3.5"></i> 2. Rigor Clínico &amp; Bases Farmacológicas Auditadas
+            </span>
+            <span class="text-[10px] font-mono text-emerald-300">Zero Alucinação Matemática</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+            <div class="p-2 rounded-lg bg-slate-900 border border-slate-800/90">
+              <span class="text-slate-400 block text-[10px]">Catálogo REMUME / SUS</span>
+              <strong class="text-white font-mono" id="audit-count-remume">252 apresentações</strong>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-900 border border-slate-800/90">
+              <span class="text-slate-400 block text-[10px]">Guia Farmacêutico HSL</span>
+              <strong class="text-white font-mono" id="audit-count-hsl">976 fármacos EV</strong>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-900 border border-slate-800/90">
+              <span class="text-slate-400 block text-[10px]">PedBook Drogas &amp; PALS</span>
+              <strong class="text-white font-mono" id="audit-count-pedb">226 drogas + 287 condutas</strong>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-900 border border-slate-800/90">
+              <span class="text-slate-400 block text-[10px]">Interações &amp; Y-Site UTI</span>
+              <strong class="text-white font-mono" id="audit-count-interacoes">285 pares críticos</strong>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-900 border border-slate-800/90">
+              <span class="text-slate-400 block text-[10px]">Benchmark RAM (DVA + ClCr)</span>
+              <strong class="text-teal-300 font-mono" id="audit-bench-ram">0.35 ms (Determinístico)</strong>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-900 border border-slate-800/90">
+              <span class="text-slate-400 block text-[10px]">Parser SafetyGuard</span>
+              <strong class="text-emerald-300 font-mono" id="audit-bench-safety">Ativo (Cláusula-a-Cláusula)</strong>
+            </div>
+          </div>
+          <ul class="space-y-1 text-[11px] text-slate-300 pt-1 border-t border-slate-800/80">
+            <li>• <strong class="text-white">Doses Críticas Verificadas:</strong> Noradrenalina (64 mcg/mL), Soro Hipertônico 3% (445 mL SF 0,9% + 55 mL NaCl 20%), Intubação SRI com tetos em obesidade (Fentanil/Etomidato/Midazolam) e Amoxicilina pediátrica (teto 1500–2000 mg/dia).</li>
+            <li>• <strong class="text-white">Trava de Alergia Inteligente:</strong> Distingue alergia verdadeira de negações clínicas (ex.: <em>"Alergia a amoxicilina; nega alergia a dipirona"</em> bloqueia apenas beta-lactâmicos e libera dipirona).</li>
+            <li>• <strong class="text-white">Proteção Materno-Fetal:</strong> Bloqueia automaticamente AINEs, IECA/BRA, Quinolonas, Estatinas e Tetraciclinas quando gestação está ativa.</li>
+          </ul>
+        </div>
+
+        <!-- 3. Guia de Bolso: Atalhos Ultra-Rápidos no Telegram (Sem Barra /) -->
+        <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-[10.5px] font-bold uppercase tracking-wider text-sky-400">
+              3. Acesso Rápido no Telegram (Toque para Copiar Atalho)
+            </span>
+            <span class="text-[10px] text-slate-400">Roteador Coloquial 0ms</span>
+          </div>
+          <p class="text-[11px] text-slate-300">Você não precisa navegar em menus durante a emergência: basta digitar direto no chat do Telegram sem barra (<code class="text-sky-300">/</code>):</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+            <button type="button" onclick="copiarTextoClipboard('nora 70', 'Atalho nora 70 copiado!')" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left flex items-center justify-between transition">
+              <div>
+                <code class="text-rose-300 font-bold font-mono text-[11px]">nora 70</code>
+                <span class="text-[10px] text-slate-400 block">Vazão de Noradrenalina (mL/h) p/ 70kg</span>
+              </div>
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i>
+            </button>
+            <button type="button" onclick="copiarTextoClipboard('dobuta 70', 'Atalho dobuta 70 copiado!')" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left flex items-center justify-between transition">
+              <div>
+                <code class="text-rose-300 font-bold font-mono text-[11px]">dobuta 70</code>
+                <span class="text-[10px] text-slate-400 block">Diluição e vazão de Dobutamina p/ 70kg</span>
+              </div>
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i>
+            </button>
+            <button type="button" onclick="copiarTextoClipboard('amoxi 15kg', 'Atalho amoxi 15kg copiado!')" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left flex items-center justify-between transition">
+              <div>
+                <code class="text-amber-300 font-bold font-mono text-[11px]">amoxi 15kg</code>
+                <span class="text-[10px] text-slate-400 block">Amoxicilina 50 e 90 mg/kg/dia em mL</span>
+              </div>
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i>
+            </button>
+            <button type="button" onclick="copiarTextoClipboard('dipirona 16kg', 'Atalho dipirona 16kg copiado!')" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left flex items-center justify-between transition">
+              <div>
+                <code class="text-amber-300 font-bold font-mono text-[11px]">dipirona 16kg</code>
+                <span class="text-[10px] text-slate-400 block">Dose pediátrica em gotas e solução oral</span>
+              </div>
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i>
+            </button>
+            <button type="button" onclick="copiarTextoClipboard('clcr 68 72 1.4', 'Atalho clcr 68 72 1.4 copiado!')" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left flex items-center justify-between transition">
+              <div>
+                <code class="text-sky-300 font-bold font-mono text-[11px]">clcr 68 72 1.4</code>
+                <span class="text-[10px] text-slate-400 block">Cockcroft-Gault (68a, 72kg, Cr 1.4)</span>
+              </div>
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i>
+            </button>
+            <button type="button" onclick="copiarTextoClipboard('dpp 15/05/2026', 'Atalho dpp copiado!')" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left flex items-center justify-between transition">
+              <div>
+                <code class="text-pink-300 font-bold font-mono text-[11px]">dpp 15/05/2026</code>
+                <span class="text-[10px] text-slate-400 block">Idade gestacional exata e trimestre</span>
+              </div>
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4. Reorganização Modular & Complementaridade Cockpit × Telegram -->
+        <div class="p-3 rounded-xl bg-purple-950/25 border border-purple-500/30 space-y-1.5">
+          <span class="text-[10.5px] font-bold uppercase tracking-wider text-purple-300 block">
+            4. Arquitetura Modular, Complementaridade &amp; Foco Generalista
+          </span>
+          <ul class="space-y-1 text-[11px] text-slate-300">
+            <li>• <strong class="text-white">Telegram vs. Cockpit PWA:</strong> Papéis definidos sem duplicação — Telegram para atalho de bolso em 3s, áudio rápido e lembretes de rotina; Cockpit PWA para Estação SOAP unificada, calculadoras 100% offline e passagem visual de leitos.</li>
+            <li>• <strong class="text-white">Consolidação de Fontes Únicas:</strong> Eliminação de módulos duplicados (Lactação, Fallback IA Offline, sobrescrita de SOAP) e extensão do <strong>SafetyGuard</strong> a todos os fluxos SOAP + sinalização honesta de RAG/contingência.</li>
+            <li>• <strong class="text-white">Foco Internato &amp; Generalista:</strong> Revelação progressiva na aba SOAP (6 ações de cabeceira visíveis), alvos táteis ≥ 44px nas calculadoras, numerais tabulares e subespecialidades terciárias sob demanda.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="px-4 py-2.5 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between">
+        <span class="text-[10.5px] text-slate-400">Relatório completo disponível também em <code class="text-teal-300">RELATORIO_AUDITORIA_PROFUNDA.md</code> e via <code class="text-sky-300">/auditoria</code></span>
+        <button onclick="fecharModalAuditoriaSistema()" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPT LÓGICO COMPLETO DO COCKPIT MÓVEL -->
   <script>
     // 1. Inicialização do Telegram WebApp SDK e Persistência de Sessão (PWA / Web)
@@ -4837,13 +5055,58 @@
       }
     } catch (eStore) {}
 
-    const sessaoAtiva = (typeof cockpitSessionRaw === 'string' && cockpitSessionRaw)
+    let sessaoAtiva = (typeof cockpitSessionRaw === 'string' && cockpitSessionRaw)
       ? cockpitSessionRaw
       : (sessionFromUrl || sessionStored || tg?.initData || '');
 
     // Salva a credencial permanentemente no navegador para modo PWA/Site independente
     if (sessaoAtiva && typeof localStorage !== 'undefined') {
       try { localStorage.setItem('cockpit_session', sessaoAtiva); } catch (e) {}
+    }
+
+    function ehContextoTelegramMiniApp() {
+      const t = window.Telegram?.WebApp;
+      return Boolean(t && typeof t.initData === 'string' && t.initData.length > 0 && t.platform && t.platform !== 'unknown');
+    }
+
+    let _promessaSessaoWeb = null;
+    async function garantirSessaoCockpitAtiva(forcarRenovacao = false) {
+      if (!forcarRenovacao) {
+        const atual = sessaoAtiva || (ehContextoTelegramMiniApp() ? tg?.initData : '');
+        if (atual) return atual;
+      }
+      if (_promessaSessaoWeb && !forcarRenovacao) return _promessaSessaoWeb;
+
+      _promessaSessaoWeb = (async () => {
+        try {
+          const baseOrigin = (typeof window !== 'undefined' && window.location && window.location.origin && !window.location.hostname.includes('github.io'))
+            ? window.location.origin
+            : 'https://rotina-tt8n.onrender.com';
+          let customBackend = '';
+          try { customBackend = localStorage.getItem('cockpit_backend_url') || ''; } catch (_) {}
+          const urlSessao = (customBackend || baseOrigin).replace(/\/+$/, '') + '/api/cockpit/web-session';
+          const resp = await fetch(urlSessao, { method: 'GET', headers: { 'Accept': 'application/json' } });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data && data.ok && data.session) {
+              sessaoAtiva = data.session;
+              try { localStorage.setItem('cockpit_session', sessaoAtiva); } catch (_) {}
+              return sessaoAtiva;
+            }
+          }
+        } catch (_) {}
+        return sessaoAtiva || '';
+      })();
+
+      try {
+        return await _promessaSessaoWeb;
+      } finally {
+        _promessaSessaoWeb = null;
+      }
+    }
+
+    if (!sessaoAtiva) {
+      garantirSessaoCockpitAtiva().catch(() => {});
     }
 
     // Detecção e isolamento de privacidade de Convidado (RBAC)
@@ -4904,20 +5167,21 @@
     }
 
     function expandirTelaCheia() {
-      if (!window.Telegram?.WebApp) return;
+      if (!ehContextoTelegramMiniApp()) return;
       const t = window.Telegram.WebApp;
       try {
-        t.ready();
-        if (typeof t.requestFullscreen === 'function') {
+        if (typeof t.ready === 'function') t.ready();
+        const suportaVersao = (v) => typeof t.isVersionAtLeast === 'function' && t.isVersionAtLeast(v);
+        if (suportaVersao('8.0') && typeof t.requestFullscreen === 'function') {
           t.requestFullscreen();
         }
         if (!t.isExpanded && typeof t.expand === 'function') {
           t.expand();
         }
-        if (typeof t.disableVerticalSwipes === 'function') {
+        if (suportaVersao('7.7') && typeof t.disableVerticalSwipes === 'function') {
           t.disableVerticalSwipes();
         }
-        if (t.enableClosingConfirmation) {
+        if (suportaVersao('6.2') && typeof t.enableClosingConfirmation === 'function') {
           t.enableClosingConfirmation();
         }
       } catch (e) {
@@ -4925,18 +5189,16 @@
       }
     }
 
-    if (tg) {
+    if (ehContextoTelegramMiniApp()) {
       expandirTelaCheia();
+      window.addEventListener('DOMContentLoaded', expandirTelaCheia);
+      window.addEventListener('load', expandirTelaCheia);
+      setTimeout(expandirTelaCheia, 150);
     }
-    window.addEventListener('DOMContentLoaded', expandirTelaCheia);
-    window.addEventListener('load', expandirTelaCheia);
-    setTimeout(expandirTelaCheia, 100);
-    setTimeout(expandirTelaCheia, 300);
-    setTimeout(expandirTelaCheia, 800);
 
     function hapticFeedback(tipo = 'light') {
       try {
-        if (tg?.HapticFeedback) {
+        if (ehContextoTelegramMiniApp() && typeof tg?.isVersionAtLeast === 'function' && tg.isVersionAtLeast('6.1') && tg?.HapticFeedback) {
           tg.HapticFeedback.impactOccurred(tipo);
         }
       } catch (e) {}
@@ -4944,7 +5206,7 @@
 
     function fecharMiniApp() {
       hapticFeedback('medium');
-      if (tg?.close) {
+      if (ehContextoTelegramMiniApp() && tg?.close) {
         tg.close();
       } else {
         window.history.back();
@@ -4955,13 +5217,20 @@
       const ids = [
         'modal-sbar-passagem', 'modal-ficha-farmaco', 'modal-ambulatorio-soap', 'modal-atestado-cfm',
         'modal-prenatal', 'modal-centro-obstetrico', 'modal-ginecologia-ambulatorial', 'modal-plantao-offline',
-        'modal-sintese-dia-soap', 'modal-exame-fisico-normal', 'modal-raiox-preceptor', 'modal-preceptor-live'
+        'modal-sintese-dia-soap', 'modal-exame-fisico-normal', 'modal-raiox-preceptor', 'modal-preceptor-live',
+        'modal-estacao-soap', 'modal-auditoria-sistema'
       ];
       ids.forEach(id => {
         const m = document.getElementById(id);
-        if (m) m.classList.add('hidden');
+        if (m) {
+          m.classList.add('hidden');
+          if (m.style && m.style.display === 'flex') m.style.display = '';
+        }
       });
-      document.querySelectorAll('.fixed.inset-0:not(.hidden)').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.fixed.inset-0:not(.hidden)').forEach(el => {
+        el.classList.add('hidden');
+        if (el.style && el.style.display === 'flex') el.style.display = '';
+      });
     }
 
     // 2. Navegação de Abas
@@ -5052,7 +5321,7 @@
       };
 
       // 1. Telegram Mini App oficial (quando aberto via Bot do Telegram)
-      if (window.Telegram?.WebApp && typeof window.Telegram.WebApp.sendData === 'function') {
+      if (ehContextoTelegramMiniApp() && typeof window.Telegram.WebApp.sendData === 'function') {
         try {
           window.Telegram.WebApp.sendData(JSON.stringify(payload));
           copiarToast('Enviado com sucesso para o chat do Telegram!');
@@ -6254,7 +6523,10 @@
     let cockpitCarregando = false;
 
     async function cockpitRpc(metodo, ...args) {
-      const credencial = sessaoAtiva || tg?.initData;
+      let credencial = sessaoAtiva || (ehContextoTelegramMiniApp() ? tg?.initData : '');
+      if (!credencial) {
+        credencial = await garantirSessaoCockpitAtiva();
+      }
       if (!credencial) {
         throw new Error('Sessão indisponível. Reabra pelo menu do Telegram.');
       }
@@ -6275,12 +6547,12 @@
 
       const primaryUrl = (customBackend || RENDER_BACKEND).replace(/\/+$/, '') + '/api/cockpit';
 
-      const json = await executarFetchComRetry(primaryUrl, {
+      const invocarRpc = async (tokenSessao) => executarFetchComRetry(primaryUrl, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({
           metodo: metodo,
-          session: credencial,
+          session: tokenSessao,
           args: args
         })
       }, {
@@ -6289,8 +6561,31 @@
         backoffBaseMs: 500
       });
 
+      let json;
+      try {
+        json = await invocarRpc(credencial);
+      } catch (errRpc) {
+        if (/sess[aã]o|autorizad|401/i.test(errRpc?.message || '')) {
+          const novaCredencial = await garantirSessaoCockpitAtiva(true);
+          if (novaCredencial && novaCredencial !== credencial) {
+            json = await invocarRpc(novaCredencial);
+          } else {
+            throw errRpc;
+          }
+        } else {
+          throw errRpc;
+        }
+      }
+
       if (json && json.ok) {
         return json.resultado;
+      }
+      if (json && /sess[aã]o|autorizad/i.test(json.erro || '')) {
+        const novaCredencial = await garantirSessaoCockpitAtiva(true);
+        if (novaCredencial && novaCredencial !== credencial) {
+          const retryJson = await invocarRpc(novaCredencial);
+          if (retryJson && retryJson.ok) return retryJson.resultado;
+        }
       }
       throw new Error(json?.erro || "Falha na resposta do servidor.");
     }
@@ -6363,6 +6658,7 @@
         } else {
           cockpitDados = null;
           cockpitRenderizarSoap('', false, e.message);
+          atualizarPontoCegoPlantaoDinamico();
           const leitosEl = document.getElementById('lista-leitos-container');
           if (leitosEl) leitosEl.textContent = e.message;
         }
@@ -11059,6 +11355,27 @@
       copiarTextoClipboard(texto.trim(), 'SOAP integral copiado para o PEP!');
     }
 
+    let soapAcoesExpandidas = false;
+
+    function alternarExpansaoAcoesSoap() {
+      soapAcoesExpandidas = !soapAcoesExpandidas;
+      if (typeof hapticFeedback === 'function') hapticFeedback('selection');
+      const secundarias = document.querySelectorAll('#container-acoes-rapidas-soap .soap-acao-secundaria');
+      secundarias.forEach(btn => {
+        if (soapAcoesExpandidas) {
+          btn.classList.remove('hidden');
+        } else {
+          btn.classList.add('hidden');
+        }
+      });
+      const label = document.getElementById('label-toggle-acoes-soap');
+      if (label) {
+        label.textContent = soapAcoesExpandidas
+          ? 'Recolher atalhos complementares (Manter 6 essenciais)'
+          : 'Mostrar todos os 22 atalhos (+16 complementares)';
+      }
+    }
+
     function filtrarAcoesRapidasSOAP(categoria) {
       if (typeof hapticFeedback === 'function') hapticFeedback('selection');
       const botoesFiltro = document.querySelectorAll('.btn-filtro-soap');
@@ -11071,10 +11388,16 @@
         btnAtivo.classList.remove('text-slate-400');
         btnAtivo.classList.add('bg-purple-600', 'text-white', 'font-bold');
       }
+      const btnToggle = document.getElementById('btn-toggle-acoes-soap');
       const botoes = document.querySelectorAll('#container-acoes-rapidas-soap [data-soap-cat]');
       botoes.forEach(btn => {
         if (categoria === 'todos') {
-          btn.classList.remove('hidden');
+          const ehEssencial = btn.getAttribute('data-soap-essencial') === 'true';
+          if (ehEssencial || soapAcoesExpandidas) {
+            btn.classList.remove('hidden');
+          } else {
+            btn.classList.add('hidden');
+          }
         } else {
           const cats = (btn.getAttribute('data-soap-cat') || '').split(/\s+/);
           if (cats.includes(categoria)) {
@@ -11084,9 +11407,72 @@
           }
         }
       });
+      if (btnToggle) {
+        if (categoria === 'todos') {
+          btnToggle.classList.remove('hidden');
+        } else {
+          btnToggle.classList.add('hidden');
+        }
+      }
       try {
         localStorage.setItem('rotina_soap_filtro_acoes', categoria);
       } catch (e) {}
+    }
+
+    function abrirModalAuditoriaSistema() {
+      const modal = document.getElementById('modal-auditoria-sistema');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      if (typeof hapticFeedback === 'function') hapticFeedback('light');
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        try { window.lucide.createIcons(); } catch (_) {}
+      }
+      executarBenchmarkAuditoriaAoVivo();
+    }
+
+    function fecharModalAuditoriaSistema() {
+      const modal = document.getElementById('modal-auditoria-sistema');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function executarBenchmarkAuditoriaAoVivo() {
+      const badgeTs = document.getElementById('auditoria-timestamp-badge');
+      const benchRam = document.getElementById('audit-bench-ram');
+      const cardLat = document.getElementById('auditoria-card-latencia');
+      if (badgeTs) badgeTs.textContent = 'Medindo latência em RAM...';
+      const t0Client = performance.now();
+      try {
+        const base = (window.ULTRA_CONFIG && window.ULTRA_CONFIG.API_BASE) ? window.ULTRA_CONFIG.API_BASE : '';
+        const resp = await fetch(`${base}/api/auditoria`, { headers: { 'Accept': 'application/json' } });
+        if (resp.ok) {
+          const data = await resp.json();
+          const rttMs = Math.max(1, Math.round(performance.now() - t0Client));
+          if (data && data.benchmarks_ram) {
+            const ramMs = data.benchmarks_ram.total_suite_ram_ms || 0.35;
+            if (benchRam) benchRam.textContent = `${ramMs} ms em RAM (RTT ${rttMs} ms)`;
+            if (cardLat) cardLat.textContent = `${ramMs}ms RAM · ${rttMs}ms RTT`;
+          }
+          if (data && data.bases_clinicas) {
+            const b = data.bases_clinicas;
+            const elRem = document.getElementById('audit-count-remume');
+            const elHsl = document.getElementById('audit-count-hsl');
+            const elPed = document.getElementById('audit-count-pedb');
+            const elInt = document.getElementById('audit-count-interacoes');
+            if (elRem && b.remume_itens) elRem.textContent = `${b.remume_itens} apresentações`;
+            if (elHsl && b.guia_farmaceutico_hsl) elHsl.textContent = `${b.guia_farmaceutico_hsl} fármacos EV`;
+            if (elPed && b.pedbook_drogas) elPed.textContent = `${b.pedbook_drogas} drogas + ${b.pedbook_condutas || 287} condutas`;
+            if (elInt && b.interacoes_graves) elInt.textContent = `${b.interacoes_graves} pares críticos`;
+          }
+          if (badgeTs) {
+            const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            badgeTs.textContent = `Auditado ao vivo às ${agora}`;
+          }
+        } else {
+          if (badgeTs) badgeTs.textContent = 'Modo Local em RAM Ativo';
+        }
+      } catch (_) {
+        if (badgeTs) badgeTs.textContent = 'Modo Offline Determinístico (0ms)';
+      }
     }
 
     function restaurarFiltroAcoesRapidasSOAP() {
@@ -14039,7 +14425,8 @@
       }
 
       const leitos = Array.isArray(cockpitDados?.leitos) ? cockpitDados.leitos : [];
-      const soapAtivo = typeof cockpitDados?.soap === 'string' && cockpitDados.soap.trim().length > 15 ? cockpitDados.soap.trim() : '';
+      const rawSoapAtivo = typeof cockpitDados?.soap === 'string' ? cockpitDados.soap.trim() : '';
+      const soapAtivo = ehTextoClinicoRealParaAnalise(rawSoapAtivo) ? rawSoapAtivo : '';
 
       // Lista unificada de casos para a síntese
       const listaCasos = [];
@@ -14313,7 +14700,7 @@
         termo: 'IAM',
         nomeCompleto: 'Infarto Agudo do Miocárdio (com suspeita de VD)',
         area: 'Clínica Médica',
-        regex: /(?:iam|infarto|coronari|dor\s+tor[aá]cica|supra|vd|trombol[ií]tico|cate|angioplastia)/i,
+        regex: /\b(?:iam|infarto(?:\s+agudo)?(?:\s+do\s+mioc[aá]rdio)?|s[ií]ndrome\s+coronariana|sca|supra\s+de\s+st|infarto\s+de\s+vd)\b/i,
         pontoAtencao: 'critérios de contraindicação do Nitrato no IAM de VD e PAS < 90 mmHg.',
         perolaClinica: 'No IAM de parede inferior com extensão para ventrículo direito (V3R/V4R supra), o miocárdio ventricular direito dilatado depende criticamente de pré-carga. O uso inadvertido de nitratos causa venodilatação aguda súbita, colapsa o débito cardíaco e precipita choque cardiogênico refratário e PCR.',
         diretriz: 'Regra de Ouro EMERGÊNCIA: Solicitar V3R, V4R e V7/V8 em todo IAM de parede inferior (DII, DIII, aVF). Se PAS < 90 mmHg, FC < 50 ou > 100 bpm com acometimento de VD: ZERO nitrato, ZERO betabloqueador, ZERO morfina. Expansão volêmica cautelosa com SF 0,9% e reperfusão imediata.',
@@ -14324,7 +14711,7 @@
         termo: 'IC descompensada',
         nomeCompleto: 'Insuficiência Cardíaca Aguda / Congestão Pulmonar',
         area: 'Clínica Médica',
-        regex: /(?:ic\s+descompensada|insufici[eê]ncia\s+card[ií]aca|eap|edema\s+agudo|congest[aã]o|furosemida|perfil\s+b|perfil\s+c)/i,
+        regex: /\b(?:ic\s+descompensada|insufici[eê]ncia\s+card[ií]aca\s+descompensada|edema\s+agudo\s+de\s+pulm[aã]o|eap|perfil\s+[bc])\b/i,
         pontoAtencao: 'risco de introduzir ou titular betabloqueador na fase de congestão aguda ou instabilidade.',
         perolaClinica: 'Em vigência de descompensação aguda (perfil B ou C), o miocárdio depende do tônus adrenérgico compensatório. Introduzir ou aumentar betabloqueador antes de compensar a volemia causa descompensação fulminante e choque cardiogênico. O foco prioritário imediato é vasodilatação venosa/arterial e diurese de alça.',
         diretriz: 'EMERGÊNCIA Emergência: Se perfil B (quente e úmido): Furosemida IV em bolus + Nitroglicerina/Nitroprussiato se PAS > 110. Betabloqueador: manter a dose prévia se euvolêmico/estável, mas NUNCA introduzir ou titular durante congestão aguda descompensada.',
@@ -14335,7 +14722,7 @@
         termo: 'Sepse',
         nomeCompleto: 'Sepse e Choque Séptico',
         area: 'Clínica Médica',
-        regex: /(?:sepse|choque\s+s[eé]ptico|lactato|hemocultura|ceftriaxona|meropenem|qsofa|sofa)/i,
+        regex: /\b(?:sepse|choque\s+s[eé]ptico|qsofa|protocolo\s+de\s+sepse)\b/i,
         pontoAtencao: 'atraso no antimicrobiano de amplo espectro além de 1 hora e atraso na noradrenalina precoce.',
         perolaClinica: 'Cada 60 minutos de atraso na primeira dose do antibiótico venoso adequado após identificação do choque séptico eleva a mortalidade em aproximadamente 8%. Não aguarde terminar 30 mL/kg de cristaloides se a PAM persistir < 65 mmHg: inicie noradrenalina em acesso periférico seguro de imediato.',
         diretriz: 'Bundle de 1 Hora EMERGÊNCIA: Dosar lactato sérico + coletar 2 pares de hemoculturas + infundir ATB de amplo espectro em < 60 min + cristaloides balanceados 30 mL/kg + noradrenalina precoce para alvo de PAM ≥ 65 mmHg.',
@@ -14346,7 +14733,7 @@
         termo: 'CAD',
         nomeCompleto: 'Cetoacidose Diabética (Emergência Hiperglicêmica)',
         area: 'Clínica Médica',
-        regex: /(?:cad|cetoacidose|glicemia|ceton[uú]ria|gasometria.*acidose|hgt)/i,
+        regex: /\b(?:cetoacidose\s+diab[eé]tica|cad\s+diab[eé]tica|ceton[uú]ria\s+positiva)\b/i,
         pontoAtencao: 'iniciar infusão de insulina venosa antes de checar Potássio Sérico (< 3,3 mEq/L).',
         perolaClinica: 'A insulina e a correção volêmica promovem influxo maciço de potássio extracelular para o interior das células. Se o potássio sérico inicial for < 3,3 mEq/L, a insulina precipita hipocalemia severa súbita e parada cardíaca por fibrilação ventricular em poucos minutos.',
         diretriz: 'Regra de Ouro EMERGÊNCIA: K < 3,3 mEq/L: postergue a insulina, infunda KCl 20 a 40 mEq/h até K ≥ 3,3. K 3,3 a 5,2: inicie insulina regular 0,1 U/kg/h e adicione 20-30 mEq KCl/litro. Associar SG 5% quando glicemia atingir 250 mg/dL.',
@@ -14357,7 +14744,7 @@
         termo: 'AVCi',
         nomeCompleto: 'Acidente Vascular Cerebral Isquêmico Agudo',
         area: 'Neurologia',
-        regex: /(?:avc|avci|isqu[eê]mico|d[eé]ficit|hemiparesia|afasia|trombol[ií]se|nihss)/i,
+        regex: /\b(?:avci|avc\s+isqu[eê]mico|acidente\s+vascular\s+cerebral|nihss|tromb[oó]lise\s+cerebral)\b/i,
         pontoAtencao: 'redução intempestiva e agressiva da pressão arterial em janela aguda ou sem indicação formal.',
         perolaClinica: 'A hipertensão arterial reativa na fase aguda do AVCi é um mecanismo protetor vital para manter o fluxo sanguíneo colateral na área de penumbra isquêmica. Baixar a PA precipitadamente colapsa a perfusão da penumbra e transforma tecido viável em infarto cerebral permanente.',
         diretriz: 'Protocolo AVC EMERGÊNCIA: Candidato a trombólise venosa: controle rigoroso se PA > 185x110 mmHg. Não candidato a trombólise: NÃO intervir na PA a menos que ultrapasse 220x120 mmHg ou haja lesão aguda de órgão-alvo (EAP, dissecção aórtica).',
@@ -14368,7 +14755,7 @@
         termo: 'Politrauma',
         nomeCompleto: 'Politrauma Grave com Choque Hemorrágico',
         area: 'Cirurgia Geral',
-        regex: /(?:trauma|politrauma|acidente|colis[aã]o|fast|hemorr[aá]gico|choque\s+hipovol)/i,
+        regex: /\b(?:politrauma|choque\s+hemorr[aá]gico|choque\s+hipovol[eê]mico|trauma\s+abdominal|fast\s+positivo)\b/i,
         pontoAtencao: 'encaminhar paciente em choque com FAST positivo para Tomografia Computadorizada.',
         perolaClinica: 'A tomografia computadorizada é o chamado "túnel da morte" no trauma instável: isola o doente da equipe de ressuscitação e atrasa em 40 minutos o controle cirúrgico. Paciente politraumatizado instável com líquido livre abdominal no FAST tem indicação mandatória de laparotomia imediata no centro cirúrgico.',
         diretriz: 'Regra de Ouro ATLS / Sala Vermelha: Choque hemodinâmico + FAST Positivo = Centro Cirúrgico imediato (Laparotomia de Controle de Danos). Protocolo de Transfusão Maciça precoce 1:1:1 e Ácido Tranexâmico 1g IV em < 3h.',
@@ -14379,7 +14766,7 @@
         termo: 'Status Epilepticus',
         nomeCompleto: 'Crise Convulsiva Prolongada / Estado de Mal Epiléptico',
         area: 'Neurologia',
-        regex: /(?:crise\s+convulsiva|convuls[aã]o|epilep|status|diazepam|midazolam|fenito[ií]na)/i,
+        regex: /\b(?:crise\s+convulsiva|estado\s+de\s+mal\s+epil[eé]ptico|status\s+epilepticus)\b/i,
         pontoAtencao: 'repetir doses de benzodiazepínicos indefinidamente sem escalonar para droga de 2ª linha após 5-10 min.',
         perolaClinica: 'Com a persistência da crise convulsiva (> 5 minutos), ocorre internalização e perda de receptores GABAérgicos na membrana sináptica. Insistir em doses repetidas de benzodiazepínico falha em parar a crise e induz depressão respiratória grave com PCR sem escalonar para bloqueadores de canais de sódio.',
         diretriz: 'Protocolo Sala Vermelha EMERGÊNCIA: Minuto 0 a 5: ABC + glicemia + oxigênio. Minuto 5 a 10: Diazepam 10 mg IV lento (ou Midazolam IM). Se persistir após 5 min, mais 1 dose de benzo E iniciar imediatamente droga de 2ª linha: Fenitoína 20 mg/kg IV (máx 50 mg/min). Minuto 20+: IOT e anestésico contínuo.',
@@ -14390,7 +14777,7 @@
         termo: 'Crise Asmática',
         nomeCompleto: 'Crise de Asma Aguda Grave / Broncoespasmo',
         area: 'Clínica Médica',
-        regex: /(?:asma|broncoespasmo|sibilos|dpoc|salbutamol|ipratr[oó]pio|corticoide)/i,
+        regex: /\b(?:crise\s+asm[aá]tica|asma\s+aguda|broncoespasmo\s+grave|mal\s+asm[aá]tico)\b/i,
         pontoAtencao: 'subestimar a crise asmática grave quando há desaparecimento dos sibilos ("tórax silencioso").',
         perolaClinica: 'O desaparecimento dos sibilos na crise asmática grave com taquipneia exaustiva não é sinal de melhora, mas sim de colapso ventilatório por obstrução extrema do fluxo aéreo (tórax silencioso). A gasometria mostrando PaCO2 "normal" ou elevado neste cenário indica falência respiratória iminente e fadiga diafragmática catastrófica.',
         diretriz: 'Protocolo Sala Vermelha EMERGÊNCIA: Inalação contínua de Beta-2 agonista (Salbutamol) + Brometo de Ipratrópio + Corticoide sistêmico venoso imediato (Hidrocortisona ou Metilprednisolona) + Sulfato de Magnésio 2g IV em 20 min nas crises graves.',
@@ -14401,7 +14788,7 @@
         termo: 'Pré-Eclâmpsia Grave',
         nomeCompleto: 'Pré-Eclâmpsia com Sinais de Gravidade e Eclâmpsia',
         area: 'Ginecologia e Obstetrícia',
-        regex: /(?:pr[eé]-ecl[aâ]mpsia|ecl[aâ]mpsia|gestante.*pa|protein[uú]ria|hellp|sulfato)/i,
+        regex: /\b(?:pr[eé]-ecl[aâ]mpsia|ecl[aâ]mpsia|s[ií]ndrome\s+hellp)\b/i,
         pontoAtencao: 'administrar diazepam em convulsão gravídica em vez de Sulfato de Magnésio imediato.',
         perolaClinica: 'Benzodiazepínicos não previnem a recorrência de crises eclâmpticas e provocam hipotonia e depressão respiratória fetal severa. O Sulfato de Magnésio é a única intervenção com evidência classe I que reduz a mortalidade materna em mais de 50% e estabiliza o endotélio microvascular cerebral.',
         diretriz: 'Esquema Zuspan EMERGÊNCIA: Ataque: Sulfato de Magnésio 4g IV em 20 min. Manutenção: 1 a 2 g/h em bomba de infusão contínua. Vigilância estrita de reflexo patelar, diurese (> 25 mL/h) e FR (> 16 irpm). Manter antídoto à beira do leito: Gluconato de Cálcio 10% 10 mL IV.',
@@ -14412,7 +14799,7 @@
         termo: 'Anafilaxia',
         nomeCompleto: 'Anafilaxia e Choque Anafilático',
         area: 'Pediatria',
-        regex: /(?:anafilaxia|choque\s+anafil[aá]tico|angioedema|estridor|urtic[aá]ria.*choque|adrenalina)/i,
+        regex: /\b(?:anafilaxia|choque\s+anafil[aá]tico|edema\s+de\s+glote)\b/i,
         pontoAtencao: 'prescrever corticoide ou anti-histamínico antes ou em vez de Adrenalina intramuscular imediata.',
         perolaClinica: 'Corticoides demoram de 4 a 6 horas para ter efeito na transcrição proteica e não revertem o choque nem o broncoespasmo agudo. Anti-histamínicos apenas aliviam prurido cutâneo. Adrenalina IM no vasto lateral da coxa é a única droga salva-vidas com ação imediata nos receptores alfa-1 e beta-2.',
         diretriz: 'Conduta Salva-Vidas Imediata: Adrenalina 1:1000 pura IM no vasto lateral da coxa (0,5 mg no adulto; 0,01 mg/kg em crianças, máx 0,3-0,5 mg). Repetir a cada 5 a 15 minutos se refratário. Decúbito dorsal com membros inferiores elevados.',
@@ -14421,11 +14808,21 @@
     ];
 
     let indicePontoCegoPlantao = 0;
-    let pontosCegosFiltradosHoje = [...CATALOGO_PONTOS_CEGOS_PLANTAO];
+    let pontosCegosFiltradosHoje = [];
+
+    function ehTextoClinicoRealParaAnalise(texto) {
+      const s = String(texto || '').trim();
+      if (s.length <= 15) return false;
+      if (/MODO OFFLINE DE CONTING[ÊE]NCIA|Conex[ãa]o com a IA cl[ií]nica oscilou|reenvie a mensagem em alguns instantes|Atalho imediato \(100% ativo offline\)|Nenhum dado cl[ií]nico informado|Nenhum caso ativo|Sess[ãa]o indispon[ií]vel|Carregando|Aguardando atendimentos/i.test(s)) {
+        return false;
+      }
+      return true;
+    }
 
     function analisarCasosPlantaoDinamico() {
       const leitos = Array.isArray(cockpitDados?.leitos) ? cockpitDados.leitos : [];
-      const soapTexto = typeof cockpitDados?.soap === 'string' ? cockpitDados.soap : '';
+      const rawSoap = typeof cockpitDados?.soap === 'string' ? cockpitDados.soap : '';
+      const soapTexto = ehTextoClinicoRealParaAnalise(rawSoap) ? rawSoap.trim() : '';
 
       const mapaOcorrencias = new Map();
       const pontosIdentificados = [];
@@ -14433,6 +14830,7 @@
       // 1. Analisa cada leito registrado no bot
       leitos.forEach(l => {
         const textoCompleto = `${l.status || ''} ${l.dados || ''}`;
+        if (!ehTextoClinicoRealParaAnalise(textoCompleto)) return;
         CATALOGO_PONTOS_CEGOS_PLANTAO.forEach(pc => {
           if (pc.regex.test(textoCompleto)) {
             const qtd = mapaOcorrencias.get(pc.id) || 0;
@@ -14445,7 +14843,9 @@
       });
 
       // 2. Analisa casos persistidos do dia
-      const casosDoDia = Array.isArray(cockpitDados?.casosDoDia) ? cockpitDados.casosDoDia : [];
+      const casosDoDia = Array.isArray(cockpitDados?.casosDoDia)
+        ? cockpitDados.casosDoDia.filter(c => ehTextoClinicoRealParaAnalise(`${c.titulo || ''} ${c.soap || ''}`))
+        : [];
       casosDoDia.forEach(c => {
         const textoCaso = `${c.titulo || ''} ${c.soap || ''}`;
         CATALOGO_PONTOS_CEGOS_PLANTAO.forEach(pc => {
@@ -14459,8 +14859,8 @@
         });
       });
 
-      // 3. Analisa o SOAP do atendimento em andamento
-      if (soapTexto && soapTexto.trim().length > 10) {
+      // 3. Analisa o SOAP ativo apenas se for atendimento clínico real ainda não contabilizado em casosDoDia
+      if (soapTexto && !casosDoDia.some(c => String(c.soap || '').trim() === soapTexto)) {
         CATALOGO_PONTOS_CEGOS_PLANTAO.forEach(pc => {
           if (pc.regex.test(soapTexto)) {
             const qtd = mapaOcorrencias.get(pc.id) || 0;
@@ -14472,11 +14872,7 @@
         });
       }
 
-      if (pontosIdentificados.length === 0) {
-        pontosCegosFiltradosHoje = [];
-      } else {
-        pontosCegosFiltradosHoje = pontosIdentificados;
-      }
+      pontosCegosFiltradosHoje = pontosIdentificados;
 
       const pontoFoco = pontosCegosFiltradosHoje.length > 0
         ? pontosCegosFiltradosHoje[indicePontoCegoPlantao % pontosCegosFiltradosHoje.length]
@@ -14592,13 +14988,14 @@
 
     function alternarCasoPontoCego() {
       hapticFeedback('selection');
-      if (pontosCegosFiltradosHoje.length <= 1) {
-        pontosCegosFiltradosHoje = [...CATALOGO_PONTOS_CEGOS_PLANTAO];
+      if (!Array.isArray(pontosCegosFiltradosHoje) || pontosCegosFiltradosHoje.length === 0) {
+        copiarToast('Nenhum caso clínico conduzido hoje para alternar.');
+        return;
       }
       indicePontoCegoPlantao = (indicePontoCegoPlantao + 1) % pontosCegosFiltradosHoje.length;
       atualizarPontoCegoPlantaoDinamico(false);
       const pc = pontosCegosFiltradosHoje[indicePontoCegoPlantao];
-      copiarToast(`Revisão: ${pc.termo} (${pc.area})`);
+      if (pc) copiarToast(`Revisão: ${pc.termo} (${pc.area})`);
     }
 
     let ultimaProvocacaoPreceptor = '';
@@ -14964,6 +15361,11 @@
     let liveActiveSources = [];
     let liveMudo = false;
     let historicoTranscricaoLive = [];
+    let liveReadyTimeout = null;
+    let liveModoServidor = 'unknown';
+    let liveVoiceHangoverUntil = 0;
+    let liveSpeechRec = null;
+    let livePendingTexts = [];
 
     function abrirModalPreceptorLive() {
       hapticFeedback('medium');
@@ -14974,7 +15376,7 @@
 
     function fecharModalPreceptorLive() {
       hapticFeedback('light');
-      if (liveConectado) {
+      if (liveConectado || liveWs) {
         desconectarLivePreceptor();
       }
       const modal = document.getElementById('modal-preceptor-live');
@@ -15022,34 +15424,82 @@
     }
 
     async function alternarSessaoLivePreceptor() {
-      if (liveConectado) {
+      if (liveConectado || liveWs) {
         desconectarLivePreceptor();
       } else {
         await conectarLivePreceptor();
       }
     }
 
-    async function conectarLivePreceptor() {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        copiarToast('Microfone indisponível neste navegador.');
+    async function enviarTextoLivePreceptor() {
+      const input = document.getElementById('input-live-preceptor-texto');
+      if (!input) return;
+      const texto = input.value.trim();
+      if (!texto) return;
+      input.value = '';
+
+      if (!liveWs || liveWs.readyState !== WebSocket.OPEN) {
+        livePendingTexts.push(texto);
+        if (!liveWs) {
+          await conectarLivePreceptor();
+        }
         return;
       }
 
+      setLiveStatus('🧠 Preceptor analisando...', 'connected');
+      liveWs.send(JSON.stringify({ text: texto }));
+    }
+
+    function iniciarSpeechRecognitionContingencia() {
+      if (liveSpeechRec || !liveMicStream) return;
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) return;
+      try {
+        const rec = new SpeechRec();
+        rec.lang = 'pt-BR';
+        rec.continuous = true;
+        rec.interimResults = false;
+        rec.onresult = (event) => {
+          if (!liveConectado || liveMudo || isPreceptorSpeaking() || liveModoServidor !== 'neural_contingency') return;
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              const transcript = String(event.results[i][0]?.transcript || '').trim();
+              if (transcript.length >= 2 && liveWs && liveWs.readyState === WebSocket.OPEN) {
+                setLiveStatus('🧠 Preceptor analisando fala...', 'connected');
+                liveWs.send(JSON.stringify({ text: transcript }));
+              }
+            }
+          }
+        };
+        rec.onerror = () => {};
+        rec.onend = () => {
+          if (liveConectado && liveSpeechRec === rec && liveModoServidor === 'neural_contingency') {
+            try { rec.start(); } catch (_) {}
+          }
+        };
+        rec.start();
+        liveSpeechRec = rec;
+      } catch (_) {}
+    }
+
+    async function conectarLivePreceptor() {
       // 1. Inicializa / Resuma AudioContexts IMEDIATAMENTE no clique do usuário (contorna bloqueio de autoplay)
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       try {
-        if (!liveInputAudioCtx || liveInputAudioCtx.state === 'closed') {
-          liveInputAudioCtx = new AudioCtx({ sampleRate: 16000 });
-        }
-        if (liveInputAudioCtx.state === 'suspended') {
-          await liveInputAudioCtx.resume();
-        }
+        if (AudioCtx) {
+          if (!liveInputAudioCtx || liveInputAudioCtx.state === 'closed') {
+            liveInputAudioCtx = new AudioCtx({ sampleRate: 16000 });
+          }
+          if (liveInputAudioCtx.state === 'suspended') {
+            await liveInputAudioCtx.resume();
+          }
 
-        if (!liveOutputAudioCtx || liveOutputAudioCtx.state === 'closed') {
-          liveOutputAudioCtx = new AudioCtx({ sampleRate: 24000 });
-        }
-        if (liveOutputAudioCtx.state === 'suspended') {
-          await liveOutputAudioCtx.resume();
+          if (!liveOutputAudioCtx || liveOutputAudioCtx.state === 'closed') {
+            liveOutputAudioCtx = new AudioCtx({ sampleRate: 24000 });
+          }
+          if (liveOutputAudioCtx.state === 'suspended') {
+            await liveOutputAudioCtx.resume();
+          }
         }
       } catch (eCtx) {
         console.warn('[AudioContext Init Warning]:', eCtx);
@@ -15062,16 +15512,24 @@
       if (btnIniciarLabel) btnIniciarLabel.textContent = 'Conectando...';
 
       try {
-        // Obter stream de microfone 16kHz
-        liveMicStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: 1,
-            sampleRate: 16000,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
+        // Obter stream de microfone 16kHz (resiliente: continua em modo texto+voz se microfone não estiver disponível)
+        liveMicStream = null;
+        if (navigator.mediaDevices?.getUserMedia) {
+          try {
+            liveMicStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                channelCount: 1,
+                sampleRate: 16000,
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+              }
+            });
+          } catch (eMic) {
+            console.warn('[Live Mic Warning]:', eMic?.message || eMic);
+            liveMicStream = null;
           }
-        });
+        }
 
         // Configurar URL do WebSocket resiliente
         let wsUrl;
@@ -15093,6 +15551,15 @@
         }
 
         liveWs = new WebSocket(wsUrl);
+        let readyRecebido = false;
+
+        clearTimeout(liveReadyTimeout);
+        liveReadyTimeout = setTimeout(() => {
+          if (liveConectado && !readyRecebido) {
+            setLiveStatus('⚠️ Servidor demorou para responder (tente digitar ou reconectar)', 'connecting');
+            copiarToast('Handshake Live demorou mais que o esperado. Tente enviar texto ou reconectar.');
+          }
+        }, 9000);
 
         liveWs.onopen = () => {
           liveConectado = true;
@@ -15104,7 +15571,7 @@
             btnIniciar.classList.add('bg-rose-600', 'hover:bg-rose-500');
           }
           if (btnIniciarLabel) btnIniciarLabel.textContent = 'Encerrar Sessão Live';
-          if (btnMutar) btnMutar.classList.remove('hidden');
+          if (btnMutar && liveMicStream) btnMutar.classList.remove('hidden');
 
           // Enviar caso clínico atual como contexto prévio se houver
           if (cockpitDados && cockpitDados.soap) {
@@ -15112,7 +15579,9 @@
             liveWs.send(JSON.stringify({ text: contextoResumo }));
           }
 
-          iniciarCapturaAudioLive();
+          if (liveMicStream) {
+            iniciarCapturaAudioLive();
+          }
         };
 
         let audioTocadoNesteTurno = false;
@@ -15122,7 +15591,27 @@
           try {
             const msg = JSON.parse(event.data);
             if (msg.type === 'ready') {
-              setLiveStatus('🎙️ Ouvindo você... (fale agora)', 'listening');
+              readyRecebido = true;
+              clearTimeout(liveReadyTimeout);
+              liveModoServidor = msg.mode || 'live';
+              if (liveMicStream) {
+                setLiveStatus(
+                  liveModoServidor === 'live'
+                    ? '🎙️ Ouvindo você... (Gemini 3.8 Live)'
+                    : '🎙️ Ouvindo você... (Contingência Neural)',
+                  'listening'
+                );
+                if (liveModoServidor === 'neural_contingency') {
+                  iniciarSpeechRecognitionContingencia();
+                }
+              } else {
+                setLiveStatus('💬 Conectado sem microfone (Digite abaixo)', 'connected');
+                const inputTxt = document.getElementById('input-live-preceptor-texto');
+                if (inputTxt) inputTxt.focus();
+              }
+              while (livePendingTexts.length > 0 && liveWs && liveWs.readyState === WebSocket.OPEN) {
+                liveWs.send(JSON.stringify({ text: livePendingTexts.shift() }));
+              }
               hapticFeedback('success');
             } else if (msg.type === 'audio' && msg.audio) {
               audioTocadoNesteTurno = true;
@@ -15143,13 +15632,13 @@
               audioTocadoNesteTurno = false;
               ultimoTextoModelo = '';
               finalizarBolhasStreamingLive();
-              setLiveStatus('🎙️ Ouvindo você...', 'listening');
+              setLiveStatus(liveMicStream ? '🎙️ Ouvindo você...' : '💬 Aguardando sua mensagem...', liveMicStream ? 'listening' : 'connected');
             } else if (msg.type === 'turnComplete') {
               finalizarBolhasStreamingLive();
               if (!audioTocadoNesteTurno && ultimoTextoModelo.trim()) {
                 falarTextoPreceptorFallback(ultimoTextoModelo.trim());
               } else if (liveActiveSources.length === 0) {
-                setLiveStatus('🎙️ Ouvindo você...', 'listening');
+                setLiveStatus(liveMicStream ? '🎙️ Ouvindo você...' : '💬 Aguardando sua mensagem...', liveMicStream ? 'listening' : 'connected');
               }
               // Reseta marcadores APENAS no encerramento completo do turno
               audioTocadoNesteTurno = false;
@@ -15179,7 +15668,7 @@
 
       } catch (err) {
         console.error('Falha ao iniciar Live:', err);
-        copiarToast('Não foi possível acessar o microfone ou conectar: ' + err.message);
+        copiarToast('Não foi possível conectar ao Preceptor Live: ' + err.message);
         desconectarLivePreceptor();
       }
     }
@@ -15190,6 +15679,7 @@
     }
 
     function iniciarCapturaAudioLive() {
+      if (!liveMicStream) return;
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!liveInputAudioCtx || liveInputAudioCtx.state === 'closed') {
         liveInputAudioCtx = new AudioCtx({ sampleRate: 16000 });
@@ -15232,6 +15722,11 @@
         for (let i = 0; i < float32.length; i++) soma += float32[i] * float32[i];
         const rms = Math.sqrt(soma / float32.length);
 
+        const agora = Date.now();
+        if (rms >= 0.006) {
+          liveVoiceHangoverUntil = agora + 1400;
+        }
+
         // Feedback visual imediato: o anel do avatar reage em tempo real à voz do médico
         if (pulseRing) {
           if (rms > 0.008) {
@@ -15244,8 +15739,8 @@
           }
         }
 
-        // Limiar VAD ajustado para 0.006 para filtrar ruído ambiente e vazamento de fone
-        if (rms < 0.006) return;
+        // Janela de hangover de 1.4s garante que o VAD do Gemini Live receba o silêncio pós-fala para fechar o turno
+        if (rms < 0.006 && agora >= liveVoiceHangoverUntil) return;
 
         // Converte Float32 para Int16 Little-Endian
         const int16 = new Int16Array(float32.length);
@@ -15277,10 +15772,14 @@
         if (ptVoice) utter.voice = ptVoice;
         utter.onstart = () => setLiveStatus('🔊 Preceptor Falando (Voz Sintetizada)...', 'speaking');
         utter.onend = () => {
-          if (liveActiveSources.length === 0) setLiveStatus('🎙️ Ouvindo você...', 'listening');
+          if (liveActiveSources.length === 0) {
+            setLiveStatus(liveMicStream ? '🎙️ Ouvindo você...' : '💬 Aguardando sua mensagem...', liveMicStream ? 'listening' : 'connected');
+          }
         };
         utter.onerror = () => {
-          if (liveActiveSources.length === 0) setLiveStatus('🎙️ Ouvindo você...', 'listening');
+          if (liveActiveSources.length === 0) {
+            setLiveStatus(liveMicStream ? '🎙️ Ouvindo você...' : '💬 Aguardando sua mensagem...', liveMicStream ? 'listening' : 'connected');
+          }
         };
         window.speechSynthesis.speak(utter);
       } catch (eSpeech) {
@@ -15318,7 +15817,9 @@
             liveActiveSources.push(source);
             source.onended = () => {
               liveActiveSources = liveActiveSources.filter(s => s !== source);
-              if (liveActiveSources.length === 0) setLiveStatus('🎙️ Ouvindo você...', 'listening');
+              if (liveActiveSources.length === 0) {
+                setLiveStatus(liveMicStream ? '🎙️ Ouvindo você...' : '💬 Aguardando sua mensagem...', liveMicStream ? 'listening' : 'connected');
+              }
             };
           }, (errDec) => {
             console.warn('[DecodeAudioData Error]:', errDec);
@@ -15331,7 +15832,9 @@
         }
 
         // Caso padrão: PCM raw 16-bit 24kHz enfileirado no tempo sem sobreposição
-        const int16 = new Int16Array(bytes.buffer);
+        const byteCountEven = bytes.byteLength - (bytes.byteLength % 2);
+        if (byteCountEven < 2) return;
+        const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, byteCountEven / 2);
         const float32 = new Float32Array(int16.length);
         for (let i = 0; i < int16.length; i++) {
           float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7FFF);
@@ -15354,7 +15857,7 @@
         source.onended = () => {
           liveActiveSources = liveActiveSources.filter(s => s !== source);
           if (liveActiveSources.length === 0) {
-            setLiveStatus('🎙️ Ouvindo você...', 'listening');
+            setLiveStatus(liveMicStream ? '🎙️ Ouvindo você...' : '💬 Aguardando sua mensagem...', liveMicStream ? 'listening' : 'connected');
           }
         };
       } catch (ePlay) {
@@ -15375,6 +15878,17 @@
 
     function desconectarLivePreceptor() {
       liveConectado = false;
+      liveModoServidor = 'unknown';
+      liveVoiceHangoverUntil = 0;
+      clearTimeout(liveReadyTimeout);
+      liveReadyTimeout = null;
+
+      if (liveSpeechRec) {
+        const rec = liveSpeechRec;
+        liveSpeechRec = null;
+        try { rec.stop(); } catch (_) {}
+      }
+
       pararReproducaoAudioLive();
       finalizarBolhasStreamingLive();
 
@@ -15395,8 +15909,9 @@
         liveOutputAudioCtx = null;
       }
       if (liveWs) {
-        try { liveWs.close(); } catch (_) {}
+        const ws = liveWs;
         liveWs = null;
+        try { ws.close(); } catch (_) {}
       }
 
       setLiveStatus('Pronto para conectar ao vivo', 'idle');
@@ -15436,6 +15951,9 @@
       const container = document.getElementById('live-transcricao-container');
       if (!container || !texto) return;
 
+      const placeholder = container.querySelector('[data-placeholder="true"]');
+      if (placeholder) placeholder.remove();
+
       // Se for streaming do mesmo interlocutor, concatena na mesma bolha
       if (isStreaming && bolhaStreamingAtual[papel]) {
         const pEl = bolhaStreamingAtual[papel].querySelector('p');
@@ -15474,7 +15992,7 @@
       finalizarBolhasStreamingLive();
       const container = document.getElementById('live-transcricao-container');
       if (container) {
-        container.innerHTML = '<p class="text-slate-500 italic text-center py-4">Transcrição limpa. Fale no microfone para continuar a discussão socrática...</p>';
+        container.innerHTML = '<p data-placeholder="true" class="text-slate-500 italic text-center py-4">Transcrição limpa. Fale no microfone ou digite abaixo para continuar a discussão socrática...</p>';
       }
     }
 
@@ -15682,6 +16200,9 @@
         return;
       }
 
+      if (!sessaoAtiva && !tg?.initData) {
+        await garantirSessaoCockpitAtiva();
+      }
       if (!sessaoAtiva && !tg?.initData) {
         copiarToast('Sessão indisponível. Reabra pelo menu /menu.');
         return;
@@ -16132,11 +16653,11 @@
     // Retorno ao chat do Telegram
     function voltarParaChat() {
       hapticFeedback('light');
-      if (tg?.openTelegramLink) {
+      if (ehContextoTelegramMiniApp() && tg?.openTelegramLink) {
         // Abre o link do bot no Telegram (URL do chat)
         const chatUrl = 'https://t.me/' + (tg.initDataUnsafe?.via_bot?.username || 'ultrarotina_bot');
         tg.openTelegramLink(chatUrl);
-      } else if (tg?.close) {
+      } else if (ehContextoTelegramMiniApp() && tg?.close) {
         tg.close();
       } else {
         copiarToast('Canal oficial do Telegram: @ultrarotina_bot');

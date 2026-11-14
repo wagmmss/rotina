@@ -19,13 +19,24 @@
 
   function dispararHaptic(tipo) {
     try {
-      if (typeof window !== "undefined" && window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+      var tgApp = (typeof window !== "undefined" && window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+      var inTg = Boolean(
+        tgApp &&
+        typeof tgApp.initData === "string" &&
+        tgApp.initData.length > 0 &&
+        tgApp.platform &&
+        tgApp.platform !== "unknown" &&
+        typeof tgApp.isVersionAtLeast === "function" &&
+        tgApp.isVersionAtLeast("6.1") &&
+        tgApp.HapticFeedback
+      );
+      if (inTg) {
         if (tipo === "sucesso") {
-          window.Telegram.WebApp.HapticFeedback.notificationOccurred("success");
+          tgApp.HapticFeedback.notificationOccurred("success");
         } else if (tipo === "aviso") {
-          window.Telegram.WebApp.HapticFeedback.notificationOccurred("warning");
+          tgApp.HapticFeedback.notificationOccurred("warning");
         } else {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred("light");
+          tgApp.HapticFeedback.impactOccurred("light");
         }
       } else if (typeof navigator !== "undefined" && navigator.vibrate) {
         navigator.vibrate(tipo === "sucesso" ? [15, 30, 20] : 12);

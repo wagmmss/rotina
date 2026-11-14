@@ -213,6 +213,9 @@ function salvarSoapCockpit_(chat, origem, texto) {
   try {
     var strTexto = String(texto).trim();
     if (strTexto.length < 10) return;
+    if (/MODO OFFLINE DE CONTING[ÊE]NCIA|Conex[ãa]o com a IA cl[ií]nica oscilou|reenvie a mensagem em alguns instantes|Nenhum dado cl[ií]nico informado/i.test(strTexto)) {
+      return;
+    }
 
     var rev = (origem && origem.revision) ? origem.revision : null;
     if (!rev && typeof modoBot === 'function') {
@@ -825,12 +828,80 @@ function _cockpitAcaoEfNormal(chat, dadosAtuais, params) {
   return { sucesso: true, acao: 'ef_normal', resposta: String(soapEf), soap: String(soapEf), revision: estadoAtualizadoEf.revision, textoEf: exameAInserir };
 }
 
+function _auditarSegurancaSoapTexto_(contextoTexto, respostaTexto, extras) {
+  extras = extras || {};
+  try {
+    var sg = null;
+    if (typeof SafetyGuard !== 'undefined' && SafetyGuard && typeof SafetyGuard.validateSafety === 'function') {
+      sg = SafetyGuard;
+    } else if (typeof require === 'function') {
+      try { sg = require('./clinical/safety_guard.js'); } catch (_) {
+        try { sg = require('../src/clinical/safety_guard.js'); } catch (_2) { sg = null; }
+      }
+    }
+    if (!sg || typeof sg.validateSafety !== 'function') {
+      return { is_safe: true, safety_alerts: [], bannerTexto: '' };
+    }
+
+    var ctxStr = String(contextoTexto || '');
+    var outStr = String(respostaTexto || '');
+    var medicamentosDetectados = [];
+    var padraoMeds = /\b(dipirona|metamizol|paracetamol|ibuprofeno|diclofenaco|cetoprofeno|nimesulida|naproxeno|aas|acido acetilsalicilico|amoxicilina|ampicilina|clavulanato|penicilina|benzetacil|ceftriaxona|cefalexina|azitromicina|claritromicina|ciprofloxacino|levofloxacino|sulfametoxazol|bactrim|enalapril|captopril|losartana|valsartana|sinvastatina|atorvastatina|rosuvastatina|doxiciclina|metotrexato|isotretinoina|varfarina|misoprostol|valproato)\b/gi;
+    var encontrados = outStr.match(padraoMeds) || [];
+    var vistos = {};
+    for (var i = 0; i < encontrados.length; i++) {
+      var mNorm = encontrados[i].toLowerCase();
+      if (!vistos[mNorm]) {
+        vistos[mNorm] = true;
+        medicamentosDetectados.push({ medicamento: encontrados[i] });
+      }
+    }
+
+    var isGestante = !!(extras.gestante || /\bgestant[ea]|\bgr[áa]vida|\big\s*\d+\s*sem/i.test(ctxStr));
+    var rawInput = {
+      alergias: extras.alergias || ctxStr,
+      gestante: isGestante,
+      idade: extras.idade,
+      peso: extras.peso,
+      patient_context: {
+        alergias: extras.alergias || ctxStr,
+        gestante: isGestante,
+        idade: extras.idade,
+        peso: extras.peso
+      }
+    };
+
+    var audit = sg.validateSafety({
+      subjetivo_formatado: { alergias: ctxStr },
+      plano: { prescricao: medicamentosDetectados }
+    }, rawInput);
+
+    var banner = '';
+    if (audit && Array.isArray(audit.safety_alerts) && audit.safety_alerts.length > 0 && !audit.is_safe) {
+      var criticos = audit.safety_alerts.filter(function(a) { return a && a.severity === 'CRITICAL'; });
+      if (criticos.length > 0) {
+        banner = '\n\n🚨 *TRAVA DE SEGURANÇA FARMACOLÓGICA (SAFETYGUARD):*\n' +
+          criticos.map(function(a) { return '• ' + a.message; }).join('\n');
+      }
+    }
+    return {
+      is_safe: audit ? audit.is_safe : true,
+      safety_alerts: audit ? audit.safety_alerts : [],
+      bannerTexto: banner
+    };
+  } catch (_) {
+    return { is_safe: true, safety_alerts: [], bannerTexto: '' };
+  }
+}
+
 function _cockpitAcaoPlano(chat, dadosAtuais) {
   if (!dadosAtuais.trim()) throw new Error('Nenhum caso ativo para gerar Avaliação e Plano.');
-  var soapPlano = gerarSOAPComIA(dadosAtuais, { fecharPlano: true });
+  var soapPlano = String(gerarSOAPComIA(dadosAtuais, { fecharPlano: true }));
+  var auditPlano = _auditarSegurancaSoapTexto_(dadosAtuais, soapPlano);
+  if (auditPlano.bannerTexto) soapPlano += auditPlano.bannerTexto;
   var estPlano = modoBot(chat);
-  salvarSoapCockpit_(chat, estPlano, String(soapPlano));
-  return { sucesso: true, acao: 'plano', resposta: String(soapPlano), soap: String(soapPlano), revision: estPlano ? estPlano.revision : null };
+  salvarSoapCockpit_(chat, estPlano, soapPlano);
+  return { sucesso: true, acao: 'plano', resposta: soapPlano, soap: soapPlano, is_safe: auditPlano.is_safe, clinical_alerts: auditPlano.safety_alerts, revision: estPlano ? estPlano.revision : null };
 }
 
 function _cockpitAcaoPreceptor(chat, dadosAtuais, texto, estado, params) {
@@ -1011,16 +1082,28 @@ function cockpitConversar(initData, params) {
     } else {
       resultadoSoap = gerarSOAPComIA(novoContexto);
     }
-    salvarSoapCockpit_(chat, novoEstado, String(resultadoSoap));
+    var textoSoapFinal = String(resultadoSoap || '');
+    var auditConv = _auditarSegurancaSoapTexto_(novoContexto, textoSoapFinal, {
+      alergias: params && params.alergias,
+      gestante: params && params.gestante,
+      idade: params && params.idade,
+      peso: params && params.peso
+    });
+    if (auditConv.bannerTexto) {
+      textoSoapFinal += auditConv.bannerTexto;
+    }
+    salvarSoapCockpit_(chat, novoEstado, textoSoapFinal);
 
-    var ehOffline = !!(params && params.fallbackLocal) || (typeof resultadoSoap === 'string' && (/conting[êe]ncia|modo\s+offline|protocolos?\s+offline|offline/i.test(resultadoSoap)));
+    var ehOffline = !!(params && params.fallbackLocal) || (typeof textoSoapFinal === 'string' && (/conting[êe]ncia|modo\s+offline|protocolos?\s+offline|offline/i.test(textoSoapFinal)));
     return {
       sucesso: true,
       acao: 'enviar',
       textoRecebido: texto,
       transcricao: transcricaoAudio || null,
-      resposta: String(resultadoSoap),
-      soap: String(resultadoSoap),
+      resposta: textoSoapFinal,
+      soap: textoSoapFinal,
+      is_safe: auditConv.is_safe,
+      clinical_alerts: auditConv.safety_alerts,
       contingencia_offline: ehOffline,
       revision: novoEstado.revision
     };
@@ -1145,6 +1228,16 @@ function cockpitSoapAmbulatorial(initData, params) {
     throw new Error('Módulo SoapAmbulatorialService indisponível.');
   }
   var resultado = SoapAmbulatorialService.estruturarSoapAmbulatorial(params);
+  var ctxSeguranca = [params.alergias, params.queixa, params.hda, params.antecedentes].filter(Boolean).join(' ');
+  var auditAmb = _auditarSegurancaSoapTexto_(ctxSeguranca, (resultado && (resultado.textoProntuario || JSON.stringify(resultado))) || '', {
+    alergias: params.alergias,
+    gestante: params.gestante,
+    idade: params.idade,
+    peso: params.peso
+  });
+  if (resultado && auditAmb.bannerTexto && resultado.textoProntuario) {
+    resultado.textoProntuario += auditAmb.bannerTexto;
+  }
   if (resultado && resultado.textoProntuario) {
     try {
       var estAtual = modoBot(chat);
@@ -1153,7 +1246,12 @@ function cockpitSoapAmbulatorial(initData, params) {
       }
     } catch (ePers) {}
   }
-  return { sucesso: true, soap: resultado };
+  return {
+    sucesso: true,
+    soap: resultado,
+    is_safe: auditAmb.is_safe,
+    clinical_alerts: auditAmb.safety_alerts
+  };
 }
 
 /**

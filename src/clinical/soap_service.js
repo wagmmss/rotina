@@ -363,6 +363,9 @@ async function processClinicalSoap(payload = {}) {
 
     // 1.5. Consulta RAG local em < 2ms no acervo "Tá de Clinicagem" (data/tdc_knowledge.db)
     const tdcEvidences = tdcService.buscarEvidenciasClinicas(brain_dump, 3);
+    const tdcMeta = typeof tdcService.getSourceMetadata === 'function'
+      ? tdcService.getSourceMetadata()
+      : { dbAvailable: Boolean(tdcService.sqliteDb), source: tdcEvidences.length ? 'resumo_emergencia_local' : 'none' };
 
     // 2. Invoca o agente especialista na Vertex AI com injeção das métricas exatas e evidências TdC
     const rawSoap = await generateSoapWithVertex({
@@ -414,6 +417,7 @@ async function processClinicalSoap(payload = {}) {
       criticalAlerts
     );
 
+    const modelUsed = rawSoap?._meta?.model_used || 'desconhecido';
     return {
       success: true,
       data: sanitizedSoap,
@@ -426,7 +430,10 @@ async function processClinicalSoap(payload = {}) {
       },
       _meta: {
         ...(rawSoap._meta || {}),
-        tdc_rag_matches: tdcEvidences.length
+        tdc_rag_matches: tdcEvidences.length,
+        tdc_source: tdcMeta.source,
+        tdc_db_available: tdcMeta.dbAvailable,
+        is_offline_contingency: modelUsed === 'motor-clinico-deterministico-local'
       }
     };
   } catch (error) {
