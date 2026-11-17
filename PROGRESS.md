@@ -1,4 +1,6 @@
-### STATUS: AUDITORIA_PROFUNDA_E_4_ONDAS_CONCLUIDAS
+### STATUS: CONGELADO_COMO_LEGADO_REFERENCIA
+
+> 🧊 **Projeto Congelado (2026-11-17)**: O monólito `Ultra Rotina` foi congelado como arquivo de referência/backup local. Os utilitários clínicos de alto uso (`REMUME_RP.csv` e o Kit de Calculadoras/Escores UBS/UPA) foram migrados para o projeto principal `Protocolos_Clinicos`.
 
 # 📅 Ultra Rotina — Ecossistema Clínico & Cockpit PWA
 
